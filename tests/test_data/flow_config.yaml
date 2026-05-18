@@ -1,0 +1,43 @@
+flow_name: "Chip Design Flow"
+
+steps:
+  - name: init
+    label: "Initialize"
+  - name: floorplan
+    label: "Floorplan"
+  - name: place
+    label: "Placement"
+  - name: cts
+    label: "Clock Tree"
+  - name: route
+    label: "Routing"
+  - name: routeopt
+    label: "Route Opt"
+  - name: STA
+    label: "Static Timing"
+
+metrics:
+  - key: WNS
+    label: "WNS"
+    format: ".3f"
+    reports:
+      - "reports/timing.rpt"
+      - "reports/wns_summary.rpt"
+  - key: TNS
+    label: "TNS"
+    format: ".3f"
+  - key: max_cap
+    label: "Max Cap"
+    format: ".4f"
+  - key: max_tran
+    label: "Max Tran"
+    format: ".4f"
+  - key: leakage
+    label: "Leakage (mW)"
+    format: ".2f"
+
+job_columns:
+  - key: status
+    label: "Job Status"
+  - key: runtime
+    label: "Wall Time"

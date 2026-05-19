@@ -1,6 +1,7 @@
 import os
+import subprocess
 
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import QSettings, Qt, QTimer
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QScrollArea,
                              QSplitter, QVBoxLayout, QWidget)
@@ -9,6 +10,7 @@ from pdf_gui.models.config import FlowConfig, load_config
 from pdf_gui.models.run_data import Version
 from pdf_gui.services.data_loader import load_versions
 from pdf_gui.services.file_scanner import scan_runs
+from pdf_gui.widgets.settings_dialog import SettingsDialog
 from pdf_gui.widgets.sidebar import Sidebar
 from pdf_gui.widgets.status_bar import StatusBar as SBWrapper
 from pdf_gui.widgets.toolbar import ToolbarWidget
@@ -40,6 +42,7 @@ class MainWindow(QMainWindow):
     def _init_ui(self):
         self.setWindowTitle(f"PDF GUI — {self._config.flow_name}")
         self.setMinimumSize(900, 500)
+        self.resize(1100, 700)
 
         self._toolbar = ToolbarWidget(
             default_font=self._config.default_font,
@@ -47,6 +50,7 @@ class MainWindow(QMainWindow):
         )
         self._toolbar.refresh_clicked.connect(self.refresh)
         self._toolbar.font_changed.connect(self._apply_font)
+        self._toolbar.settings_clicked.connect(self._open_settings)
         self.addToolBar(self._toolbar)
 
         self._sidebar = Sidebar(self._config)
@@ -66,6 +70,7 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._scroll_area)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
+        splitter.setSizes([230, 870])
         self.setCentralWidget(splitter)
 
         self._sb_wrapper = SBWrapper(self.statusBar())
@@ -80,6 +85,22 @@ class MainWindow(QMainWindow):
             self._timer = None
 
     def refresh(self):
+        cmd = self._get_refresh_command()
+        if cmd:
+            self._sb_wrapper.update_text("Running refresh script...")
+            try:
+                result = subprocess.run(
+                    cmd, shell=True, capture_output=True, text=True,
+                    timeout=300, cwd=self._runs_dir)
+                if result.returncode != 0:
+                    err = result.stderr.strip() or result.stdout.strip()
+                    self._sb_wrapper.update_text(
+                        f"Script failed (exit {result.returncode}): {err[:200]}")
+            except subprocess.TimeoutExpired:
+                self._sb_wrapper.update_text("Refresh script timed out")
+            except Exception as e:
+                self._sb_wrapper.update_text(f"Script error: {e}")
+
         self._config = self._reload_config()
         run_dirs = scan_runs(self._runs_dir)
         versions = load_versions(run_dirs, self._config)
@@ -114,6 +135,17 @@ class MainWindow(QMainWindow):
         )
 
         self.setUpdatesEnabled(True)
+
+    def _get_refresh_command(self) -> str:
+        settings = QSettings("pdf_gui", "settings")
+        gui_cmd = settings.value("refresh_command", "")
+        if gui_cmd:
+            return gui_cmd
+        return self._config.refresh_command
+
+    def _open_settings(self):
+        dialog = SettingsDialog(self)
+        dialog.exec_()
 
     def _scroll_to_version(self, name: str):
         for panel in self._panels:

@@ -1,6 +1,7 @@
 import os
+import subprocess
 
-from PyQt5.QtCore import QUrl, Qt
+from PyQt5.QtCore import QSettings, QUrl, Qt
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtWidgets import (QAbstractItemView, QHeaderView, QMenu,
                              QTableWidget, QTableWidgetItem)
@@ -13,13 +14,13 @@ class MetricTable(QTableWidget):
     def __init__(self, version: Version, config: FlowConfig, parent=None):
         columns = ["Step"] + [m.label for m in config.metrics] + \
                   [c.label for c in config.job_columns]
-        super().__init__(len(config.steps), len(columns), parent)
+        super().__init__(len(version.steps), len(columns), parent)
         self._version = version
         self._config = config
         self._columns = columns
 
         self.setHorizontalHeaderLabels(columns)
-        self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.verticalHeader().setVisible(False)
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -29,6 +30,13 @@ class MetricTable(QTableWidget):
 
         self._fill_data()
 
+        self.resizeColumnsToContents()
+        for col in range(self.columnCount()):
+            if self.columnWidth(col) < 55:
+                self.setColumnWidth(col, 55)
+        if self.columnCount() > 0:
+            self.setColumnWidth(0, max(self.columnWidth(0), 70))
+
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         height = self.horizontalHeader().height() + 4
@@ -37,22 +45,18 @@ class MetricTable(QTableWidget):
         self.setFixedHeight(height)
 
     def _fill_data(self):
-        step_map = {s.name: s for s in self._version.steps}
         icon_map = {
             StepStatus.SUCCESS: self._config.icons.SUCCESS,
             StepStatus.FAIL: self._config.icons.FAIL,
             StepStatus.RUNNING: self._config.icons.RUNNING,
             StepStatus.PENDING: self._config.icons.PENDING,
         }
+        sc_map = {sc.name: sc for sc in self._config.steps}
 
-        for row, sc in enumerate(self._config.steps):
-            step = step_map.get(sc.name)
-            self.setItem(row, 0, QTableWidgetItem(sc.label))
-
-            if step is None:
-                for col in range(1, len(self._columns)):
-                    self.setItem(row, col, QTableWidgetItem("—"))
-                continue
+        for row, step in enumerate(self._version.steps):
+            sc = sc_map.get(step.name)
+            label = sc.label if sc else step.name
+            self.setItem(row, 0, QTableWidgetItem(label))
 
             for col, mc in enumerate(self._config.metrics, start=1):
                 val = step.metrics.get(mc.key)
@@ -77,6 +81,27 @@ class MetricTable(QTableWidget):
                     val = getattr(step.job, jc.key, "")
                     self.setItem(row, col, QTableWidgetItem(str(val)))
 
+    def _resolve_report_paths(self, row: int, metric_idx: int) -> list[tuple[str, str]]:
+        """Return list of (display_path, full_resolved_path) for a cell."""
+        step_name = self._version.steps[row].name
+        mc = self._config.metrics[metric_idx]
+        result = []
+        for report_path in mc.reports:
+            resolved = report_path.replace("{version}", self._version.name)
+            resolved = resolved.replace("{step}", step_name)
+            resolved = resolved.replace("{run_dir}", self._version.dir_path)
+            full_path = resolved if os.path.isabs(resolved) else os.path.normpath(
+                os.path.join(self._version.dir_path, resolved))
+            result.append((report_path, full_path))
+        return result
+
+    def _get_report_command(self) -> str:
+        settings = QSettings("pdf_gui", "settings")
+        gui_cmd = settings.value("report_command", "")
+        if gui_cmd:
+            return gui_cmd
+        return self._config.report_command
+
     def _on_context_menu(self, pos):
         item = self.itemAt(pos)
         if item is None:
@@ -86,18 +111,33 @@ class MetricTable(QTableWidget):
         if metric_idx < 0 or metric_idx >= len(self._config.metrics):
             return
 
+        row = item.row()
+        if row >= len(self._version.steps):
+            return
+
         mc = self._config.metrics[metric_idx]
         if not mc.reports:
             return
 
+        paths = self._resolve_report_paths(row, metric_idx)
+        if not paths:
+            return
+
         menu = QMenu(self)
-        for report_path in mc.reports:
-            full_path = os.path.join(self._version.dir_path, report_path)
-            action = menu.addAction(report_path)
+        for display_path, full_path in paths:
+            action = menu.addAction(display_path)
             action.setData(full_path)
 
         action = menu.exec_(self.viewport().mapToGlobal(pos))
         if action:
             file_path = action.data()
-            if os.path.isfile(file_path):
+            cmd = self._get_report_command()
+            if cmd:
+                subprocess.Popen(
+                    cmd.replace("{file}", file_path),
+                    shell=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            elif os.path.isfile(file_path):
                 QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))

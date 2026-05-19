@@ -11,9 +11,6 @@ STATUS_COLOR_MAP = {
     OverallStatus.FAIL: "#F44336",
 }
 
-SIDEBAR_WIDTH = 230
-ITEM_MAX_NAME_WIDTH = 185
-
 
 class Sidebar(QWidget):
     version_selected = pyqtSignal(str)
@@ -21,8 +18,7 @@ class Sidebar(QWidget):
     def __init__(self, config: FlowConfig, parent=None):
         super().__init__(parent)
         self._config = config
-        self.setFixedWidth(SIDEBAR_WIDTH)
-        self.setMaximumWidth(SIDEBAR_WIDTH)
+        self.setMinimumWidth(180)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
@@ -46,6 +42,30 @@ class Sidebar(QWidget):
             item.setData(Qt.UserRole, v.name)
             self._list.addItem(item)
             self._list.setItemWidget(item, widget)
+        self._re_elide_all()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._re_elide_all()
+
+    def _re_elide_all(self):
+        available = self.width() - 50
+        if available < 60:
+            available = 60
+        for i in range(self._list.count()):
+            widget = self._list.itemWidget(self._list.item(i))
+            if widget is None:
+                continue
+            name_label = widget.findChild(QLabel, "name_label")
+            if name_label:
+                fm = name_label.fontMetrics()
+                full_name = widget.toolTip()
+                name_label.setText(fm.elidedText(full_name, Qt.ElideRight, available))
+            sub_label = widget.findChild(QLabel, "sub_label")
+            if sub_label:
+                fm = sub_label.fontMetrics()
+                full_sub = sub_label.toolTip()
+                sub_label.setText(fm.elidedText(full_sub, Qt.ElideRight, available))
 
     def _make_item_widget(self, version: Version) -> QWidget:
         dot_color = STATUS_COLOR_MAP.get(version.status, "#9E9E9E")
@@ -70,19 +90,19 @@ class Sidebar(QWidget):
         text_layout = QVBoxLayout()
         text_layout.setSpacing(1)
 
-        name_label = QLabel(version.name)
+        name_label = QLabel()
+        name_label.setObjectName("name_label")
         name_label.setStyleSheet("font-weight: bold;")
-        name_label.setMaximumWidth(ITEM_MAX_NAME_WIDTH)
-        name_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
         fm = name_label.fontMetrics()
-        name_label.setText(fm.elidedText(version.name, Qt.ElideRight, ITEM_MAX_NAME_WIDTH))
+        name_label.setText(fm.elidedText(version.name, Qt.ElideRight, self.width() - 50))
 
         subtitle = f"{version.latest_step} · {version.status.value}" if version.latest_step else version.status.value
-        sub_label = QLabel(subtitle)
+        sub_label = QLabel()
+        sub_label.setObjectName("sub_label")
         sub_label.setStyleSheet("color: #555; font-size: 11px;")
-        sub_label.setMaximumWidth(ITEM_MAX_NAME_WIDTH)
+        sub_label.setToolTip(subtitle)
         fm_sub = sub_label.fontMetrics()
-        sub_label.setText(fm_sub.elidedText(subtitle, Qt.ElideRight, ITEM_MAX_NAME_WIDTH))
+        sub_label.setText(fm_sub.elidedText(subtitle, Qt.ElideRight, self.width() - 50))
 
         text_layout.addWidget(name_label)
         text_layout.addWidget(sub_label)

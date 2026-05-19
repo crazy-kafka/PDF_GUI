@@ -55,8 +55,19 @@ metrics:
   - key: WNS                  # required — key in metrics dict within step JSON
     label: "WNS"              # optional — column header (default: key)
     format: ".3f"             # optional — Python float format spec (default: ".3f")
-    reports:                  # optional — right-click context menu items
-      - "reports/timing.rpt"  # path relative to the run directory
+    reports:                           # optional — right-click context menu items
+      - "reports/{version}/{step}/timing.rpt"  # supports {version}, {step}, {run_dir}
+```
+
+Report paths support template variables:
+
+| Variable | Expands to |
+|----------|------------|
+| `{version}` | Version name (e.g., `chip_A_golden`) |
+| `{step}` | Step name for the clicked cell (e.g., `cts`) |
+| `{run_dir}` | Full path to the run directory |
+
+Paths are resolved relative to the run directory (unless absolute).
 ```
 
 ### `job_columns`
@@ -149,8 +160,20 @@ The filename must match a step `name` from the config (e.g., `place.json`).
 
 ### Missing Step Files
 
-If a `{step_name}.json` file does not exist, the step is shown as `PENDING` with
-dashes for all metric and job columns.
+If a `{step_name}.json` file does not exist, the step is **not shown** in the version's
+metric table. This supports branched versions that only contain a subset of steps
+(e.g., a version branched from `cts` only has `cts.json`, `route.json`, etc.).
+
+To display a step as PENDING (not yet started), write a JSON file with `"status": "PENDING"`:
+
+```json
+{
+  "step": "route",
+  "status": "PENDING",
+  "metrics": {},
+  "job": {}
+}
+```
 
 ### Overall Version Status
 

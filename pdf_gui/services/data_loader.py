@@ -46,7 +46,6 @@ def load_versions(run_dirs: List[str], config: FlowConfig) -> List[Version]:
         for sc in config.steps:
             step_json_path = os.path.join(dir_path, f"{sc.name}.json")
             if not os.path.isfile(step_json_path):
-                steps.append(Step(name=sc.name, status=StepStatus.PENDING))
                 continue
 
             with open(step_json_path, "r", encoding="utf-8") as f:

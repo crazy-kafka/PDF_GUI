@@ -21,8 +21,8 @@ metrics:
     label: "WNS"
     format: ".3f"
     reports:
-      - "reports/timing.rpt"
-      - "reports/wns_summary.rpt"
+      - "reports/{version}/{step}/timing.rpt"
+      - "reports/{version}/{step}/wns_summary.rpt"
   - key: TNS
     label: "TNS"
     format: ".3f"

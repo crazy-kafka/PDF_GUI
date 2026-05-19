@@ -2,11 +2,14 @@ import json
 import os
 import tempfile
 
+from PyQt5.QtWidgets import QApplication
+
 from pdf_gui.models.config import FlowConfig, MetricConfig, StepConfig
 from pdf_gui.models.run_data import (Job, OverallStatus, Step, StepStatus,
                                      Version)
 from pdf_gui.services.data_loader import load_versions
 from pdf_gui.services.file_scanner import scan_runs
+from pdf_gui.widgets.metric_table import MetricTable
 
 
 def make_config():
@@ -111,7 +114,8 @@ def test_load_with_running():
                          "place": {"step": "place", "status": "RUNNING",
                                    "metrics": {"WNS": -0.150, "TNS": -5.0},
                                    "job": {"status": "RUNNING", "runtime": "10m"}},
-                         # route.json missing = PENDING
+                         "route": {"step": "route", "status": "PENDING",
+                                   "metrics": {}, "job": {}},
                      })
         versions = load_versions([os.path.join(tmp, d)
                                   for d in os.listdir(tmp)], config)
@@ -121,19 +125,45 @@ def test_load_with_running():
 
 
 def test_missing_step_file():
+    """Version with no step files has zero steps."""
     config = make_config()
     with tempfile.TemporaryDirectory() as tmp:
         dir_path = os.path.join(tmp, "2026-01-01_1200_chip_D")
         os.makedirs(dir_path)
         with open(os.path.join(dir_path, "run_info.json"), "w") as f:
             json.dump({"version": "chip_D"}, f)
-        # No step JSON files at all
+        # No step JSON files at all → no steps in version
         versions = load_versions([dir_path], config)
         assert len(versions) == 1
         v = versions[0]
+        assert len(v.steps) == 0
         assert v.status == OverallStatus.RUNNING
-        assert all(s.status == StepStatus.PENDING for s in v.steps)
         assert v.latest_step == ""
+
+
+def test_branched_version():
+    """Version with only a subset of step files shows only those steps."""
+    config = make_config()
+    with tempfile.TemporaryDirectory() as tmp:
+        make_run_dir(tmp, "2026-01-01_1200_chip_branch", {"version": "chip_branch"},
+                     {
+                         "place": {"step": "place", "status": "SUCCESS",
+                                   "metrics": {"WNS": -0.100, "TNS": -3.0},
+                                   "job": {"status": "SUCCESS", "runtime": "30m"}},
+                         "route": {"step": "route", "status": "RUNNING",
+                                   "metrics": {"WNS": -0.200, "TNS": -8.0},
+                                   "job": {"status": "RUNNING", "runtime": "15m"}},
+                         # init.json missing — step not in this branch
+                     })
+        versions = load_versions([os.path.join(tmp, d)
+                                  for d in os.listdir(tmp)], config)
+        v = versions[0]
+        assert v.name == "chip_branch"
+        assert len(v.steps) == 2
+        assert v.steps[0].name == "place"
+        assert v.steps[1].name == "route"
+        assert v.status == OverallStatus.RUNNING
+        assert v.latest_step == "route"
 
 
 def test_dotted_metric_key():
@@ -157,3 +187,68 @@ def test_dotted_metric_key():
                                   for d in os.listdir(tmp)], config)
         # route has no WNS/TNS in metrics → should be None
         assert versions[0].steps[2].metrics["WNS"] is None
+
+
+def test_report_path_resolution():
+    """Report paths with template variables resolve correctly and file exists."""
+    config = FlowConfig(
+        flow_name="Test",
+        steps=[
+            StepConfig(name="init"),
+            StepConfig(name="place"),
+        ],
+        metrics=[
+            MetricConfig(key="WNS", reports=[
+                "reports/{version}/{step}/timing.rpt",
+                "reports/{version}/{step}/wns_summary.rpt",
+            ]),
+            MetricConfig(key="TNS"),
+        ],
+    )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        # Create actual report files
+        report_dir = os.path.join(
+            tmp, "2026-01-01_1200_chip_A",
+            "reports", "chip_A", "init")
+        os.makedirs(report_dir)
+        timing_rpt = os.path.join(report_dir, "timing.rpt")
+        with open(timing_rpt, "w") as f:
+            f.write("timing report content")
+        wns_rpt = os.path.join(report_dir, "wns_summary.rpt")
+        with open(wns_rpt, "w") as f:
+            f.write("wns summary content")
+
+        # Create run data
+        run_dir = os.path.join(tmp, "2026-01-01_1200_chip_A")
+        with open(os.path.join(run_dir, "run_info.json"), "w") as f:
+            json.dump({"version": "chip_A"}, f)
+        with open(os.path.join(run_dir, "init.json"), "w") as f:
+            json.dump({
+                "step": "init", "status": "SUCCESS",
+                "metrics": {"WNS": -0.050}, "job": {}}, f)
+        with open(os.path.join(run_dir, "place.json"), "w") as f:
+            json.dump({
+                "step": "place", "status": "SUCCESS",
+                "metrics": {"WNS": -0.100}, "job": {}}, f)
+
+        versions = load_versions([run_dir], config)
+        assert len(versions) == 1
+
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication([])
+
+        table = MetricTable(versions[0], config)
+        paths = table._resolve_report_paths(0, 0)
+        assert len(paths) == 2
+
+        display0, full0 = paths[0]
+        assert display0 == "reports/{version}/{step}/timing.rpt"
+        assert os.path.normpath(full0) == os.path.normpath(timing_rpt)
+        assert os.path.isfile(full0)
+
+        display1, full1 = paths[1]
+        assert display1 == "reports/{version}/{step}/wns_summary.rpt"
+        assert os.path.normpath(full1) == os.path.normpath(wns_rpt)
+        assert os.path.isfile(full1)

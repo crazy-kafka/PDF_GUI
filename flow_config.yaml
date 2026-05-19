@@ -29,8 +29,8 @@ metrics:
     label: "WNS"
     format: ".3f"
     reports:
-      - "reports/timing.rpt"
-      - "reports/wns_summary.rpt"
+      - "reports/{version}/{step}/timing.rpt"
+      - "reports/{version}/{step}/wns_summary.rpt"
   - key: TNS
     label: "TNS"
     format: ".3f"
@@ -65,3 +65,10 @@ icons:
 default_font: "Consolas"
 default_font_size: 10
 auto_refresh_seconds: 0
+
+# Optional: script to run before each refresh (e.g., pull data from flow system)
+# refresh_command: "./pull_data.sh"
+
+# Optional: custom command to open report files. {file} = resolved report path.
+# If unset, the OS default handler is used.
+# report_command: "gvim {file}"

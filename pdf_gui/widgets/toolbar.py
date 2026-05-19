@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (QAction, QFontComboBox, QLabel, QSizePolicy,
 class ToolbarWidget(QToolBar):
     refresh_clicked = pyqtSignal()
     font_changed = pyqtSignal(str, int)
+    settings_clicked = pyqtSignal()
 
     def __init__(self, default_font: str = "Consolas",
                  default_font_size: int = 10, parent=None):
@@ -16,6 +17,10 @@ class ToolbarWidget(QToolBar):
         refresh_action = QAction("Refresh", self)
         refresh_action.triggered.connect(self.refresh_clicked.emit)
         self.addAction(refresh_action)
+
+        settings_action = QAction("Settings", self)
+        settings_action.triggered.connect(self.settings_clicked.emit)
+        self.addAction(settings_action)
 
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)

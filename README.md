@@ -12,7 +12,7 @@ and the GUI dynamically renders metric tables, job status, and version tracking.
 # Install
 pip install -e .
 
-# Generate sample data (25 realistic versions)
+# Generate sample data (30 realistic versions)
 python tests/test_data/generate_test_data.py
 
 # Launch with sample data
@@ -44,12 +44,19 @@ metrics:
     label: "WNS"
     format: ".3f"
     reports:
-      - "reports/timing.rpt"
+      - "reports/{version}/{step}/timing.rpt"
 job_columns:
   - key: status
   - key: runtime
+
+# Optional: script to run before each refresh
+# refresh_command: "./pull_data.sh"
+
+# Optional: custom command to open report files
+# report_command: "gvim {file}"
 ```
 
+Report paths support `{version}`, `{step}`, and `{run_dir}` template variables.
 See [docs/flow_config_schema.md](docs/flow_config_schema.md) for the full schema reference.
 
 ## Run Data Format
@@ -82,14 +89,14 @@ runs/
 }
 ```
 
-- Missing step files → displayed as `PENDING` with dashes
-- Overall version status derived from step statuses: any FAIL → red, any RUNNING → blue, all SUCCESS → green
+- Missing step file → step is **not shown** in the table. This supports branched versions that only contain a subset of steps. To show a step as pending, write a JSON file with `"status": "PENDING"`.
+- Overall version status derived from loaded step statuses: any FAIL → red, any RUNNING → blue, all SUCCESS → green
 
 ## GUI Layout
 
 ```
 ┌─────────────────     ─────────────────────────────────────────────┐
-│ Toolbar: [Refresh]                   Font: [Consolas] [10]        │
+│ Toolbar: [Refresh] [Settings]         Font: [Consolas] [10]        │
 ├────────────     ┬─────────────────────────────────────────────────┤
 │ VERSIONS        │  QScrollArea with stacked VersionTables         │
 │                 │                                                 │
@@ -109,7 +116,7 @@ runs/
 
 - **Left sidebar**: Version list with colored status dots, elided names, tooltips for full names
 - **Right panel**: Stacked version tables, foldable with `[−]`/`[+]` buttons
-- **Right-click** metric cells to open associated report files
+- **Right-click** metric cells to open associated report files (configurable via `report_command` in Settings)
 
 ## CLI
 
@@ -133,11 +140,12 @@ pdf_gui/
 │   ├── file_scanner.py  # Scans runs/ for timestamped dirs
 │   └── data_loader.py   # JSON → model objects
 ├── widgets/
-│   ├── toolbar.py       # Refresh, font controls
-│   ├── metric_table.py  # Dynamic columns, right-click reports
-│   ├── version_panel.py # Foldable header + table
-│   ├── sidebar.py       # Fixed-width list, long-name eliding
-│   └── status_bar.py    # Run count + latest version
+│   ├── toolbar.py         # Refresh, Settings, font controls
+│   ├── metric_table.py    # Dynamic columns, right-click reports
+│   ├── version_panel.py   # Foldable header + table
+│   ├── sidebar.py         # Resizable list, dynamic name eliding
+│   ├── settings_dialog.py # Refresh script + report command config
+│   └── status_bar.py      # Run count + latest version
 ├── app.py               # MainWindow
 └── main.py              # Entry point
 ```

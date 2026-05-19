@@ -63,6 +63,8 @@ class FlowConfig:
     default_font: str = "Consolas"
     default_font_size: int = 10
     auto_refresh_seconds: int = 0
+    refresh_command: str = ""
+    report_command: str = ""
 
 
 def load_config(path: str) -> FlowConfig:
@@ -116,4 +118,6 @@ def load_config(path: str) -> FlowConfig:
         default_font=raw.get("default_font", "Consolas"),
         default_font_size=raw.get("default_font_size", 10),
         auto_refresh_seconds=raw.get("auto_refresh_seconds", 0),
+        refresh_command=raw.get("refresh_command", ""),
+        report_command=raw.get("report_command", ""),
     )

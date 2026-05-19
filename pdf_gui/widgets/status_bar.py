@@ -10,3 +10,6 @@ class StatusBar:
         fm = QFontMetrics(self._bar.font())
         elided = fm.elidedText(latest_name, Qt.ElideRight, 300)
         self._bar.showMessage(f"{version_count} runs loaded | Latest: {elided}")
+
+    def update_text(self, text: str):
+        self._bar.showMessage(text)

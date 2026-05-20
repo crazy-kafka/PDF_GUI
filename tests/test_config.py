@@ -95,6 +95,41 @@ auto_refresh_seconds: 30
         os.unlink(path)
 
 
+def test_load_logs_and_pictures():
+    """logs in steps and pictures in metrics should be parsed."""
+    yaml_content = """
+flow_name: "Test"
+steps:
+  - name: init
+    logs:
+      - "logs/{version}/{step}/run.log"
+  - name: place
+metrics:
+  - key: WNS
+    reports:
+      - "rpt/timing.rpt"
+  - key: density
+    reports:
+      - "rpt/density.rpt"
+    pictures:
+      - "img/density.png"
+      - "img/density_hist.png"
+"""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        f.write(yaml_content)
+        path = f.name
+
+    try:
+        config = load_config(path)
+        assert config.steps[0].logs == ["logs/{version}/{step}/run.log"]
+        assert config.steps[1].logs == []
+        assert config.metrics[0].pictures == []
+        assert config.metrics[1].pictures == [
+            "img/density.png", "img/density_hist.png"]
+    finally:
+        os.unlink(path)
+
+
 def test_job_column_default_label():
     """Job column labels should default to key.title() replacing _ with space."""
     yaml_content = """

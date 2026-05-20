@@ -11,6 +11,7 @@ STATUS_COLOR_MAP = {
     OverallStatus.SUCCESS: "#2E7D32",
     OverallStatus.RUNNING: "#1565C0",
     OverallStatus.FAIL: "#C62828",
+    OverallStatus.PENDING: "#E65100",
 }
 
 
@@ -65,6 +66,8 @@ class VersionPanel(QWidget):
             icon = self._config.icons.FAIL
         elif self._version.status == OverallStatus.RUNNING:
             icon = self._config.icons.RUNNING
+        elif self._version.status == OverallStatus.PENDING:
+            icon = self._config.icons.PENDING
         status_label = QLabel(f"{icon} {self._version.status.value}")
         status_label.setStyleSheet("color: white; font-weight: bold;")
         hlayout.addWidget(status_label)

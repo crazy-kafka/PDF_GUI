@@ -35,31 +35,45 @@ All other fields use defaults.
 | `default_font` | string | no | `"Consolas"` | Default monospace font |
 | `default_font_size` | int | no | `10` | Font size (8–24) |
 | `auto_refresh_seconds` | int | no | `0` | Auto-refresh interval (0 = manual) |
+| `refresh_command` | string | no | `""` | Script to run before each refresh |
+| `report_command` | string | no | `""` | Command to open text files (reports, logs) |
+| `picture_command` | string | no | `""` | Command to open picture files |
 
 ### `steps`
 
-Each step requires `name` and has an optional `label`.
+Each step requires `name` and has optional `label` and `logs`.
 
 ```yaml
 steps:
-  - name: init        # required — matches {name}.json filename
-    label: "Init"     # optional — display text (default: name.title())
+  - name: init            # required — matches {name}.json filename
+    label: "Init"         # optional — display text (default: name.title())
+    logs:                 # optional — Log button in the step row
+      - "logs/{version}/{step}/run.log"
 ```
+
+`logs` supports the same template variables as reports (see below).
+If any step config has `logs`, a "Log" column appears in the table.
+Clicking the Log button opens the file (or shows a popup menu if multiple).
 
 ### `metrics`
 
-Each metric requires `key` and has optional `label`, `format`, and `reports`.
+Each metric requires `key` and has optional `label`, `format`, `reports`, and `pictures`.
 
 ```yaml
 metrics:
   - key: WNS                  # required — key in metrics dict within step JSON
     label: "WNS"              # optional — column header (default: key)
     format: ".3f"             # optional — Python float format spec (default: ".3f")
-    reports:                           # optional — right-click context menu items
-      - "reports/{version}/{step}/timing.rpt"  # supports {version}, {step}, {run_dir}
+    reports:                  # optional — right-click: text report files
+      - "reports/{version}/{step}/timing.rpt"
+    pictures:                 # optional — right-click: image files
+      - "img/{version}/{step}/density.png"
 ```
 
-Report paths support template variables:
+Right-click context menu shows separate "Reports" and "Pictures" sections
+when both are configured. Template variables apply to both.
+
+Path templates support:
 
 | Variable | Expands to |
 |----------|------------|
@@ -68,7 +82,6 @@ Report paths support template variables:
 | `{run_dir}` | Full path to the run directory |
 
 Paths are resolved relative to the run directory (unless absolute).
-```
 
 ### `job_columns`
 
@@ -94,7 +107,7 @@ colors:
   SUCCESS: "#4CAF50"   # green
   FAIL:    "#F44336"   # red
   RUNNING: "#2196F3"   # blue
-  PENDING: "#9E9E9E"   # grey
+  PENDING: "#FF9800"   # orange
 
 icons:
   SUCCESS: "✓"
@@ -177,11 +190,12 @@ To display a step as PENDING (not yet started), write a JSON file with `"status"
 
 ### Overall Version Status
 
-Derived from step statuses:
+Derived from step statuses (checked in priority order):
 - Any step `FAIL` → version `FAIL` (red)
 - Any step `RUNNING` → version `RUNNING` (blue)
 - All steps `SUCCESS` → version `SUCCESS` (green)
-- Otherwise (some PENDING, no FAIL/RUNNING) → `RUNNING` (blue)
+- Last step `PENDING` and second-last `SUCCESS` → version `PENDING` (orange)
+- Otherwise → `RUNNING` (blue)
 
 ---
 

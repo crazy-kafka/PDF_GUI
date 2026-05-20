@@ -21,6 +21,9 @@ def _derive_overall(steps: List[Step]) -> OverallStatus:
         return OverallStatus.RUNNING
     if statuses == {StepStatus.SUCCESS}:
         return OverallStatus.SUCCESS
+    if len(steps) >= 2 and steps[-1].status == StepStatus.PENDING \
+            and steps[-2].status == StepStatus.SUCCESS:
+        return OverallStatus.PENDING
     return OverallStatus.RUNNING
 
 

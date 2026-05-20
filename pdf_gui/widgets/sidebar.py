@@ -9,6 +9,7 @@ STATUS_COLOR_MAP = {
     OverallStatus.SUCCESS: "#4CAF50",
     OverallStatus.RUNNING: "#2196F3",
     OverallStatus.FAIL: "#F44336",
+    OverallStatus.PENDING: "#FF9800",
 }
 
 
@@ -61,11 +62,12 @@ class Sidebar(QWidget):
                 fm = name_label.fontMetrics()
                 full_name = widget.toolTip()
                 name_label.setText(fm.elidedText(full_name, Qt.ElideRight, available))
-            sub_label = widget.findChild(QLabel, "sub_label")
-            if sub_label:
-                fm = sub_label.fontMetrics()
-                full_sub = sub_label.toolTip()
-                sub_label.setText(fm.elidedText(full_sub, Qt.ElideRight, available))
+            sub_step_label = widget.findChild(QLabel, "sub_step_label")
+            if sub_step_label:
+                fm = sub_step_label.fontMetrics()
+                full_sub = sub_step_label.toolTip()
+                sub_step_label.setText(fm.elidedText(full_sub, Qt.ElideRight,
+                                                     max(available - 60, 30)))
 
     def _make_item_widget(self, version: Version) -> QWidget:
         dot_color = STATUS_COLOR_MAP.get(version.status, "#9E9E9E")
@@ -74,6 +76,8 @@ class Sidebar(QWidget):
             icon = self._config.icons.FAIL
         elif version.status == OverallStatus.RUNNING:
             icon = self._config.icons.RUNNING
+        elif version.status == OverallStatus.PENDING:
+            icon = self._config.icons.PENDING
 
         widget = QWidget()
         widget.setFixedHeight(44)
@@ -83,8 +87,8 @@ class Sidebar(QWidget):
         hlayout.setContentsMargins(4, 2, 4, 2)
         hlayout.setSpacing(4)
 
-        dot = QLabel(f'<span style="color:{dot_color}; font-size:14px;">●</span> {icon}')
-        dot.setFixedWidth(30)
+        dot = QLabel(f'<span style="color:{dot_color}; font-size:20px;">●</span> {icon}')
+        dot.setFixedWidth(40)
         hlayout.addWidget(dot)
 
         text_layout = QVBoxLayout()
@@ -96,16 +100,28 @@ class Sidebar(QWidget):
         fm = name_label.fontMetrics()
         name_label.setText(fm.elidedText(version.name, Qt.ElideRight, self.width() - 50))
 
-        subtitle = f"{version.latest_step} · {version.status.value}" if version.latest_step else version.status.value
-        sub_label = QLabel()
-        sub_label.setObjectName("sub_label")
-        sub_label.setStyleSheet("color: #555; font-size: 11px;")
-        sub_label.setToolTip(subtitle)
-        fm_sub = sub_label.fontMetrics()
-        sub_label.setText(fm_sub.elidedText(subtitle, Qt.ElideRight, self.width() - 50))
+        sub_layout = QHBoxLayout()
+        sub_layout.setSpacing(4)
+
+        step_text = version.latest_step + " ·" if version.latest_step else ""
+        sub_step_label = QLabel()
+        sub_step_label.setObjectName("sub_step_label")
+        sub_step_label.setStyleSheet("color: #888; font-size: 15px;")
+        sub_step_label.setToolTip(step_text)
+        fm_sub = sub_step_label.fontMetrics()
+        sub_step_label.setText(fm_sub.elidedText(step_text, Qt.ElideRight, self.width() - 70))
+
+        color = STATUS_COLOR_MAP.get(version.status, "#9E9E9E")
+        sub_status_label = QLabel(version.status.value)
+        sub_status_label.setObjectName("sub_status_label")
+        sub_status_label.setStyleSheet(f"color: {color}; font-size: 15px; font-weight: bold;")
+
+        sub_layout.addWidget(sub_step_label)
+        sub_layout.addWidget(sub_status_label)
+        sub_layout.addStretch()
 
         text_layout.addWidget(name_label)
-        text_layout.addWidget(sub_label)
+        text_layout.addLayout(sub_layout)
         hlayout.addLayout(text_layout)
         hlayout.addStretch()
 

@@ -141,6 +141,26 @@ def test_missing_step_file():
         assert v.latest_step == ""
 
 
+def test_derive_overall_pending():
+    """Last step PENDING + second-last SUCCESS → OverallStatus.PENDING."""
+    config = make_config()
+    with tempfile.TemporaryDirectory() as tmp:
+        make_run_dir(tmp, "2026-01-01_1200_chip_P", {"version": "chip_P"},
+                     {
+                         "init": {"step": "init", "status": "SUCCESS",
+                                  "metrics": {}, "job": {}},
+                         "place": {"step": "place", "status": "SUCCESS",
+                                   "metrics": {"WNS": -0.100, "TNS": -3.0},
+                                   "job": {"status": "SUCCESS", "runtime": "30m"}},
+                         "route": {"step": "route", "status": "PENDING",
+                                   "metrics": {}, "job": {}},
+                     })
+        versions = load_versions([os.path.join(tmp, d)
+                                  for d in os.listdir(tmp)], config)
+        assert versions[0].status == OverallStatus.PENDING
+        assert versions[0].latest_step == "place"
+
+
 def test_branched_version():
     """Version with only a subset of step files shows only those steps."""
     config = make_config()
@@ -240,7 +260,8 @@ def test_report_path_resolution():
             app = QApplication([])
 
         table = MetricTable(versions[0], config)
-        paths = table._resolve_report_paths(0, 0)
+        mc = config.metrics[0]
+        paths = table._resolve_paths(mc.reports, "init")
         assert len(paths) == 2
 
         display0, full0 = paths[0]
@@ -252,3 +273,87 @@ def test_report_path_resolution():
         assert display1 == "reports/{version}/{step}/wns_summary.rpt"
         assert os.path.normpath(full1) == os.path.normpath(wns_rpt)
         assert os.path.isfile(full1)
+
+
+def test_log_path_resolution():
+    """Log paths resolve with template variables."""
+    config = FlowConfig(
+        flow_name="Test",
+        steps=[
+            StepConfig(name="init", logs=["logs/{version}/{step}/run.log"]),
+        ],
+        metrics=[],
+    )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = os.path.join(tmp, "2026-01-01_1200_chip_A")
+        os.makedirs(run_dir)
+        with open(os.path.join(run_dir, "run_info.json"), "w") as f:
+            json.dump({"version": "chip_A"}, f)
+        with open(os.path.join(run_dir, "init.json"), "w") as f:
+            json.dump({"step": "init", "status": "SUCCESS",
+                        "metrics": {}, "job": {}}, f)
+
+        # Create actual log file
+        log_dir = os.path.join(run_dir, "logs", "chip_A", "init")
+        os.makedirs(log_dir)
+        log_path = os.path.join(log_dir, "run.log")
+        with open(log_path, "w") as f:
+            f.write("log content")
+
+        versions = load_versions([run_dir], config)
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication([])
+
+        table = MetricTable(versions[0], config)
+        paths = table._resolve_paths(config.steps[0].logs, "init")
+        assert len(paths) == 1
+        display, full = paths[0]
+        assert display == "logs/{version}/{step}/run.log"
+        assert os.path.normpath(full) == os.path.normpath(log_path)
+        assert os.path.isfile(full)
+
+
+def test_picture_path_resolution():
+    """Picture paths resolve with template variables."""
+    config = FlowConfig(
+        flow_name="Test",
+        steps=[
+            StepConfig(name="init"),
+        ],
+        metrics=[
+            MetricConfig(key="density", pictures=[
+                "img/{version}/{step}/density.png"])
+        ],
+    )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = os.path.join(tmp, "2026-01-01_1200_chip_A")
+        os.makedirs(run_dir)
+        with open(os.path.join(run_dir, "run_info.json"), "w") as f:
+            json.dump({"version": "chip_A"}, f)
+        with open(os.path.join(run_dir, "init.json"), "w") as f:
+            json.dump({"step": "init", "status": "SUCCESS",
+                        "metrics": {"density": 85.2}, "job": {}}, f)
+
+        # Create actual picture file
+        img_dir = os.path.join(run_dir, "img", "chip_A", "init")
+        os.makedirs(img_dir)
+        img_path = os.path.join(img_dir, "density.png")
+        with open(img_path, "w") as f:
+            f.write("placeholder")
+
+        versions = load_versions([run_dir], config)
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication([])
+
+        table = MetricTable(versions[0], config)
+        paths = table._resolve_paths(
+            config.metrics[0].pictures, "init")
+        assert len(paths) == 1
+        display, full = paths[0]
+        assert display == "img/{version}/{step}/density.png"
+        assert os.path.normpath(full) == os.path.normpath(img_path)
+        assert os.path.isfile(full)

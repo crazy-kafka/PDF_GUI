@@ -11,18 +11,32 @@ flow_name: "Chip Design Flow"
 steps:
   - name: init
     label: "Initialize"
+    logs:
+      - "logs/{version}/{step}/run.log"
   - name: floorplan
     label: "Floorplan"
+    logs:
+      - "logs/{version}/{step}/run.log"
   - name: place
     label: "Placement"
+    logs:
+      - "logs/{version}/{step}/run.log"
   - name: cts
     label: "Clock Tree"
+    logs:
+      - "logs/{version}/{step}/run.log"
   - name: route
     label: "Routing"
+    logs:
+      - "logs/{version}/{step}/run.log"
   - name: routeopt
     label: "Route Opt"
+    logs:
+      - "logs/{version}/{step}/run.log"
   - name: STA
     label: "Static Timing"
+    logs:
+      - "logs/{version}/{step}/run.log"
 
 metrics:
   - key: WNS
@@ -43,6 +57,14 @@ metrics:
   - key: leakage
     label: "Leakage (mW)"
     format: ".2f"
+  - key: density
+    label: "Density"
+    format: ".2f"
+    reports:
+      - "rpt/{version}/{step}/density.rpt"
+    pictures:
+      - "img/{version}/{step}/density.png"
+      - "img/{version}/{step}/density_hist.png"
 
 job_columns:
   - key: status
@@ -54,7 +76,7 @@ colors:
   SUCCESS: "#4CAF50"
   FAIL: "#F44336"
   RUNNING: "#2196F3"
-  PENDING: "#9E9E9E"
+  PENDING: "#FF9800"
 
 icons:
   SUCCESS: "✓"
@@ -69,6 +91,9 @@ auto_refresh_seconds: 0
 # Optional: script to run before each refresh (e.g., pull data from flow system)
 # refresh_command: "./pull_data.sh"
 
-# Optional: custom command to open report files. {file} = resolved report path.
+# Optional: custom command to open text files (reports, logs). {file} = resolved path.
 # If unset, the OS default handler is used.
 # report_command: "gvim {file}"
+
+# Optional: custom command to open picture files. {file} = resolved path.
+# picture_command: "eog {file}"

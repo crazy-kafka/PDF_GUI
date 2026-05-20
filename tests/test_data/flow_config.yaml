@@ -3,18 +3,32 @@ flow_name: "Chip Design Flow"
 steps:
   - name: init
     label: "Initialize"
+    logs:
+      - "logs/{version}/{step}/run.log"
   - name: floorplan
     label: "Floorplan"
+    logs:
+      - "logs/{version}/{step}/run.log"
   - name: place
     label: "Placement"
+    logs:
+      - "logs/{version}/{step}/run.log"
   - name: cts
     label: "Clock Tree"
+    logs:
+      - "logs/{version}/{step}/run.log"
   - name: route
     label: "Routing"
+    logs:
+      - "logs/{version}/{step}/run.log"
   - name: routeopt
     label: "Route Opt"
+    logs:
+      - "logs/{version}/{step}/run.log"
   - name: STA
     label: "Static Timing"
+    logs:
+      - "logs/{version}/{step}/run.log"
 
 metrics:
   - key: WNS
@@ -35,6 +49,13 @@ metrics:
   - key: leakage
     label: "Leakage (mW)"
     format: ".2f"
+  - key: density
+    label: "Density"
+    format: ".2f"
+    reports:
+      - "rpt/{version}/{step}/density.rpt"
+    pictures:
+      - "img/{version}/{step}/density.png"
 
 job_columns:
   - key: status

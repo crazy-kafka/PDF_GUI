@@ -10,6 +10,7 @@ class MetricConfig:
     label: str = ""
     format: str = ".3f"
     reports: List[str] = field(default_factory=list)
+    pictures: List[str] = field(default_factory=list)
 
     def __post_init__(self):
         if not self.label:
@@ -30,6 +31,7 @@ class JobColumnConfig:
 class StepConfig:
     name: str
     label: str = ""
+    logs: List[str] = field(default_factory=list)
 
     def __post_init__(self):
         if not self.label:
@@ -41,7 +43,7 @@ class StatusColors:
     SUCCESS: str = "#4CAF50"
     FAIL: str = "#F44336"
     RUNNING: str = "#2196F3"
-    PENDING: str = "#9E9E9E"
+    PENDING: str = "#FF9800"
 
 
 @dataclass
@@ -65,6 +67,7 @@ class FlowConfig:
     auto_refresh_seconds: int = 0
     refresh_command: str = ""
     report_command: str = ""
+    picture_command: str = ""
 
 
 def load_config(path: str) -> FlowConfig:
@@ -73,7 +76,8 @@ def load_config(path: str) -> FlowConfig:
 
     flow_name = raw.get("flow_name", "PD Flow")
 
-    steps = [StepConfig(name=s["name"], label=s.get("label", ""))
+    steps = [StepConfig(name=s["name"], label=s.get("label", ""),
+                        logs=s.get("logs", []))
              for s in raw.get("steps", [])]
 
     metrics = []
@@ -83,6 +87,7 @@ def load_config(path: str) -> FlowConfig:
             label=m.get("label", ""),
             format=m.get("format", ".3f"),
             reports=m.get("reports", []),
+            pictures=m.get("pictures", []),
         ))
 
     job_columns = []
@@ -120,4 +125,5 @@ def load_config(path: str) -> FlowConfig:
         auto_refresh_seconds=raw.get("auto_refresh_seconds", 0),
         refresh_command=raw.get("refresh_command", ""),
         report_command=raw.get("report_command", ""),
+        picture_command=raw.get("picture_command", ""),
     )

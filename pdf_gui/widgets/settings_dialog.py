@@ -7,6 +7,7 @@ SETTINGS_ORG = "pdf_gui"
 SETTINGS_APP = "settings"
 KEY_REFRESH_COMMAND = "refresh_command"
 KEY_REPORT_COMMAND = "report_command"
+KEY_PICTURE_COMMAND = "picture_command"
 
 
 class SettingsDialog(QDialog):
@@ -33,7 +34,7 @@ class SettingsDialog(QDialog):
 
         layout.addLayout(cmd_layout)
 
-        layout.addWidget(QLabel("Report command:"))
+        layout.addWidget(QLabel("Text file command:"))
 
         rpt_layout = QHBoxLayout()
         self._rpt_edit = QLineEdit()
@@ -42,6 +43,16 @@ class SettingsDialog(QDialog):
         rpt_layout.addWidget(self._rpt_edit)
 
         layout.addLayout(rpt_layout)
+
+        layout.addWidget(QLabel("Picture command:"))
+
+        pic_layout = QHBoxLayout()
+        self._pic_edit = QLineEdit()
+        self._pic_edit.setText(self._settings.value(KEY_PICTURE_COMMAND, ""))
+        self._pic_edit.setPlaceholderText("eog {file}")
+        pic_layout.addWidget(self._pic_edit)
+
+        layout.addLayout(pic_layout)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._save_and_accept)
@@ -58,4 +69,5 @@ class SettingsDialog(QDialog):
     def _save_and_accept(self):
         self._settings.setValue(KEY_REFRESH_COMMAND, self._cmd_edit.text().strip())
         self._settings.setValue(KEY_REPORT_COMMAND, self._rpt_edit.text().strip())
+        self._settings.setValue(KEY_PICTURE_COMMAND, self._pic_edit.text().strip())
         self.accept()

@@ -14,6 +14,7 @@ class OverallStatus(Enum):
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
     FAIL = "FAIL"
+    PENDING = "PENDING"
 
 
 @dataclass

@@ -10,20 +10,28 @@ from pdf_gui.models.config import FlowConfig, load_config
 from pdf_gui.models.run_data import Version
 from pdf_gui.services.data_loader import load_versions
 from pdf_gui.services.file_scanner import scan_runs
+from pdf_gui.utils.log import get_logger
+from pdf_gui.widgets.export_dialog import ExportDialog
 from pdf_gui.widgets.settings_dialog import SettingsDialog
+from pdf_gui.widgets.sort_dialog import SortDialog, apply_sort
 from pdf_gui.widgets.sidebar import Sidebar
 from pdf_gui.widgets.status_bar import StatusBar as SBWrapper
 from pdf_gui.widgets.toolbar import ToolbarWidget
 from pdf_gui.widgets.version_panel import VersionPanel
 
+log = get_logger()
+
 
 class MainWindow(QMainWindow):
-    def __init__(self, config_path: str, runs_dir: str):
+    def __init__(self, config_path: str, runs_dir: str,
+                 cli_refresh_command: str = None):
         super().__init__()
         self._config_path = config_path
         self._runs_dir = runs_dir
+        self._cli_refresh_command = cli_refresh_command
         self._config_mtime = 0
         self._fold_states: dict[str, bool] = {}
+        self._sort_config: dict = {"rule": "date"}
 
         self._config = self._reload_config()
         self._init_ui()
@@ -35,8 +43,8 @@ class MainWindow(QMainWindow):
             if mtime != self._config_mtime:
                 self._config_mtime = mtime
                 return load_config(self._config_path)
-        except OSError:
-            pass
+        except OSError as e:
+            log.warning("Could not check config mtime: %s", e)
         return getattr(self, "_config", load_config(self._config_path))
 
     def _init_ui(self):
@@ -51,6 +59,8 @@ class MainWindow(QMainWindow):
         self._toolbar.refresh_clicked.connect(self.refresh)
         self._toolbar.font_changed.connect(self._apply_font)
         self._toolbar.settings_clicked.connect(self._open_settings)
+        self._toolbar.export_clicked.connect(self._open_export)
+        self._toolbar.sort_clicked.connect(self._open_sort)
         self.addToolBar(self._toolbar)
 
         self._sidebar = Sidebar(self._config)
@@ -85,25 +95,39 @@ class MainWindow(QMainWindow):
             self._timer = None
 
     def refresh(self):
+        log.info("Refresh started")
         cmd = self._get_refresh_command()
         if cmd:
+            log.info("Running refresh script: %s", cmd)
             self._sb_wrapper.update_text("Running refresh script...")
             try:
                 result = subprocess.run(
                     cmd, shell=True, capture_output=True, text=True,
-                    timeout=300, cwd=self._runs_dir)
+                    timeout=300)
                 if result.returncode != 0:
                     err = result.stderr.strip() or result.stdout.strip()
+                    log.error("Refresh script failed (exit %d): %s",
+                              result.returncode, err[:200])
                     self._sb_wrapper.update_text(
                         f"Script failed (exit {result.returncode}): {err[:200]}")
             except subprocess.TimeoutExpired:
+                log.error("Refresh script timed out after 300s")
                 self._sb_wrapper.update_text("Refresh script timed out")
             except Exception as e:
+                log.error("Refresh script error: %s", e)
                 self._sb_wrapper.update_text(f"Script error: {e}")
 
         self._config = self._reload_config()
+        if self._config_mtime:
+            log.info("Config reloaded (file changed)")
         run_dirs = scan_runs(self._runs_dir)
         versions = load_versions(run_dirs, self._config)
+        versions = apply_sort(versions, self._sort_config)
+        if self._sort_config.get("rule") == "metric":
+            sc = self._sort_config
+            log.info("Sorted by %s/%s (%s)",
+                     sc["step_name"], sc["metric_key"],
+                     "ascending" if sc.get("ascending") else "descending")
 
         self.setUpdatesEnabled(False)
 
@@ -135,8 +159,11 @@ class MainWindow(QMainWindow):
         )
 
         self.setUpdatesEnabled(True)
+        log.info("Refresh complete: %d versions loaded", len(versions))
 
     def _get_refresh_command(self) -> str:
+        if self._cli_refresh_command is not None:
+            return self._cli_refresh_command
         settings = QSettings("pdf_gui", "settings")
         gui_cmd = settings.value("refresh_command", "")
         if gui_cmd:
@@ -146,6 +173,19 @@ class MainWindow(QMainWindow):
     def _open_settings(self):
         dialog = SettingsDialog(self)
         dialog.exec_()
+
+    def _open_export(self):
+        versions = [p._version for p in self._panels]
+        if not versions:
+            return
+        dialog = ExportDialog(versions, self._config, self)
+        dialog.exec_()
+
+    def _open_sort(self):
+        dialog = SortDialog(self._config, self._sort_config, self)
+        if dialog.exec_() == SortDialog.Accepted:
+            self._sort_config = dialog.result()
+            self.refresh()
 
     def _scroll_to_version(self, name: str):
         for panel in self._panels:

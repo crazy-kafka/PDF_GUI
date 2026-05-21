@@ -8,6 +8,9 @@ from PyQt5.QtWidgets import (QAbstractItemView, QAction, QHeaderView, QMenu,
 
 from pdf_gui.models.config import FlowConfig
 from pdf_gui.models.run_data import StepStatus, Version
+from pdf_gui.utils.log import get_logger
+
+log = get_logger()
 
 
 class MetricTable(QTableWidget):
@@ -92,6 +95,8 @@ class MetricTable(QTableWidget):
             )
         elif os.path.isfile(file_path):
             QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
+        else:
+            log.warning("File not found: %s", file_path)
 
     # ── data fill ───────────────────────────────────────────────────
 

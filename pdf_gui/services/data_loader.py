@@ -4,6 +4,9 @@ from typing import List
 
 from pdf_gui.models.config import FlowConfig
 from pdf_gui.models.run_data import Job, OverallStatus, Step, StepStatus, Version
+from pdf_gui.utils.log import get_logger
+
+log = get_logger()
 
 
 def _parse_step_status(raw: str) -> StepStatus:
@@ -44,15 +47,22 @@ def load_versions(run_dirs: List[str], config: FlowConfig) -> List[Version]:
             with open(run_info_path, "r", encoding="utf-8") as f:
                 run_info = json.load(f)
             version_name = run_info.get("version", version_name)
+        else:
+            log.warning("run_info.json not found in %s, using dir name", dir_path)
 
         steps = []
         for sc in config.steps:
             step_json_path = os.path.join(dir_path, f"{sc.name}.json")
             if not os.path.isfile(step_json_path):
+                log.debug("Step file not found: %s (skipped)", step_json_path)
                 continue
 
-            with open(step_json_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            try:
+                with open(step_json_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            except (OSError, json.JSONDecodeError) as e:
+                log.error("Invalid JSON in %s: %s", step_json_path, e)
+                continue
 
             status = _parse_step_status(data.get("status", ""))
 

@@ -8,6 +8,8 @@ class ToolbarWidget(QToolBar):
     refresh_clicked = pyqtSignal()
     font_changed = pyqtSignal(str, int)
     settings_clicked = pyqtSignal()
+    export_clicked = pyqtSignal()
+    sort_clicked = pyqtSignal()
 
     def __init__(self, default_font: str = "Consolas",
                  default_font_size: int = 10, parent=None):
@@ -21,6 +23,14 @@ class ToolbarWidget(QToolBar):
         settings_action = QAction("Settings", self)
         settings_action.triggered.connect(self.settings_clicked.emit)
         self.addAction(settings_action)
+
+        export_action = QAction("Export", self)
+        export_action.triggered.connect(self.export_clicked.emit)
+        self.addAction(export_action)
+
+        sort_action = QAction("Sort", self)
+        sort_action.triggered.connect(self.sort_clicked.emit)
+        self.addAction(sort_action)
 
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)

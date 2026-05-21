@@ -8,6 +8,7 @@ import json
 import os
 import random
 import shutil
+import sys
 from datetime import datetime, timedelta
 
 random.seed(42)
@@ -272,81 +273,117 @@ TNS:      -3.450 ns
                 f.write(sample_log.format(version=version_name, step=step_name))
 
 
-def main():
-    if os.path.exists(OUTPUT_DIR):
-        shutil.rmtree(OUTPUT_DIR)
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-
+def _gen_base_30():
+    """Generate the base 30 versions (shared by both suites)."""
     base_time = datetime.now()
 
     # 5 SUCCESS versions
-    success_names = [
-        "chip_A_golden",
-        "chip_B_production",
-        "chip_C_signed_off",
-        "chip_D_release",
-        "chip_E_final",
-    ]
-    for i, name in enumerate(success_names):
+    for i, name in enumerate([
+        "chip_A_golden", "chip_B_production", "chip_C_signed_off",
+        "chip_D_release", "chip_E_final",
+    ]):
         create_version(base_time, i * 30, name, "SUCCESS")
 
     # 5 RUNNING versions
-    running_names = [
-        "chip_A_eco_v2",
-        "chip_B_hotfix",
-        "chip_F_test_opt",
-        "chip_G_power_tuning",
-        "chip_H_area_reduction",
-    ]
-    for i, name in enumerate(running_names):
+    for i, name in enumerate([
+        "chip_A_eco_v2", "chip_B_hotfix", "chip_F_test_opt",
+        "chip_G_power_tuning", "chip_H_area_reduction",
+    ]):
         create_version(base_time, 150 + i * 30, name, "RUNNING")
 
     # 5 FAIL versions
-    fail_names = [
-        "chip_I_experiment",
-        "chip_J_aggressive",
-        "chip_K_retry_v1",
-        "chip_L_broken_floorplan",
-        "chip_M_timing_fail",
-    ]
-    for i, name in enumerate(fail_names):
+    for i, name in enumerate([
+        "chip_I_experiment", "chip_J_aggressive", "chip_K_retry_v1",
+        "chip_L_broken_floorplan", "chip_M_timing_fail",
+    ]):
         create_version(base_time, 300 + i * 30, name, "FAIL")
 
-    # 5 PENDING-heavy versions
-    pending_names = [
-        "chip_N_just_started",
-        "chip_O_early_phase",
-        "chip_P_waiting_queue",
-        "chip_Q_new_branch",
-        "chip_R_fresh_run",
-    ]
-    for i, name in enumerate(pending_names):
+    # 5 PENDING versions
+    for i, name in enumerate([
+        "chip_N_just_started", "chip_O_early_phase", "chip_P_waiting_queue",
+        "chip_Q_new_branch", "chip_R_fresh_run",
+    ]):
         create_version(base_time, 450 + i * 30, name, "PENDING")
 
-    # 5 branch versions (subset of steps)
-    branch_names = [
-        "chip_S_branched_cts",
-        "chip_T_branched_route",
-        "chip_U_branched_routeopt",
-        "chip_AA_partial_flow",
-        "chip_BB_eco_branch",
-    ]
-    for i, name in enumerate(branch_names):
+    # 5 branch versions
+    for i, name in enumerate([
+        "chip_S_branched_cts", "chip_T_branched_route", "chip_U_branched_routeopt",
+        "chip_AA_partial_flow", "chip_BB_eco_branch",
+    ]):
         create_version(base_time, 600 + i * 30, name, "BRANCH")
 
     # 5 long-name stress versions
-    long_names = [
+    for i, name in enumerate([
         "chip_X_ultra_aggressive_floorplan_experiment_v3_with_custom_clock_mesh_and_retention_islands",
         "chip_Y_multi_corner_multi_mode_optimization_run_with_advanced_power_gating_strategy_final",
         "chip_Z_experimental_3d_ic_integration_with_hybrid_bonding_and_through_silicon_via_analysis",
         "chip_W_low_power_iot_sensor_node_with_aggressive_voltage_scaling_and_adaptive_body_bias",
         "chip_V_high_performance_compute_tile_with_hbm3_memory_stack_and_custom_network_on_chip",
-    ]
-    for i, name in enumerate(long_names):
-        create_version(base_time, 750 + i * 30, name, random.choice(
-            ["SUCCESS", "RUNNING", "FAIL"]))
+    ]):
+        create_version(base_time, 750 + i * 30, name,
+                       random.choice(["SUCCESS", "RUNNING", "FAIL"]))
 
-    # Create sample report files for the first 5 SUCCESS versions
+
+def gen_suite2():
+    """Suite 2: base 30 + 2 new versions + some status/runtime modifications."""
+    if os.path.exists(OUTPUT_DIR):
+        shutil.rmtree(OUTPUT_DIR)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    _gen_base_30()
+
+    base_time = datetime.now()
+
+    # Add 2 new versions
+    create_version(base_time, 900, "chip_CC_new_arrival", "SUCCESS")
+    create_version(base_time, 930, "chip_DD_latest_fix", "RUNNING")
+
+    # Modify a few existing versions: change last SUCCESS step to RUNNING
+    all_dirs = sorted(os.listdir(OUTPUT_DIR), reverse=True)
+    for dir_name in all_dirs[:3]:
+        dir_path = os.path.join(OUTPUT_DIR, dir_name)
+        if not os.path.isdir(dir_path):
+            continue
+        step_files = sorted(
+            [f for f in os.listdir(dir_path)
+             if f.endswith(".json") and f != "run_info.json"],
+            key=lambda x: STEP_NAMES.index(x.replace(".json", ""))
+            if x.replace(".json", "") in STEP_NAMES else 99)
+        for sf in reversed(step_files):
+            sf_path = os.path.join(dir_path, sf)
+            with open(sf_path, "r") as f:
+                data = json.load(f)
+            if data.get("status") == "SUCCESS":
+                data["status"] = "RUNNING"
+                if data.get("job"):
+                    data["job"]["status"] = "RUNNING"
+                    old = data["job"].get("runtime", "0m").rstrip("m") or "0"
+                    data["job"]["runtime"] = str(int(old) + random.randint(5, 20)) + "m"
+                with open(sf_path, "w") as f:
+                    json.dump(data, f, indent=2)
+                break
+
+    sample_dirs = [os.path.join(OUTPUT_DIR, d) for d in sorted(os.listdir(OUTPUT_DIR))[:5]]
+    create_sample_reports(sample_dirs)
+
+    print(f"Suite 2: {len(os.listdir(OUTPUT_DIR))} versions")
+
+
+def main():
+    suite = "1"
+    if len(sys.argv) > 1 and sys.argv[1] == "--suite":
+        suite = sys.argv[2] if len(sys.argv) > 2 else "1"
+
+    if suite == "2":
+        gen_suite2()
+        return
+
+    if os.path.exists(OUTPUT_DIR):
+        shutil.rmtree(OUTPUT_DIR)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    _gen_base_30()
+
+    # Create sample report files for the first 5 versions
     all_dirs = sorted(os.listdir(OUTPUT_DIR))
     sample_dirs = [os.path.join(OUTPUT_DIR, d) for d in all_dirs[:5]]
     create_sample_reports(sample_dirs)

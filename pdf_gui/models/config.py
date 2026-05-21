@@ -3,6 +3,10 @@ from typing import List, Optional
 
 import yaml
 
+from pdf_gui.utils.log import get_logger
+
+log = get_logger()
+
 
 @dataclass
 class MetricConfig:
@@ -71,8 +75,12 @@ class FlowConfig:
 
 
 def load_config(path: str) -> FlowConfig:
-    with open(path, "r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f) or {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError) as e:
+        log.error("Failed to load config '%s': %s", path, e)
+        return FlowConfig()
 
     flow_name = raw.get("flow_name", "PD Flow")
 

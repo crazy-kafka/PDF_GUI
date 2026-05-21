@@ -35,7 +35,7 @@ All other fields use defaults.
 | `default_font` | string | no | `"Consolas"` | Default monospace font |
 | `default_font_size` | int | no | `10` | Font size (8–24) |
 | `auto_refresh_seconds` | int | no | `0` | Auto-refresh interval (0 = manual) |
-| `refresh_command` | string | no | `""` | Script to run before each refresh |
+| `refresh_command` | string | no | `""` | Script run before refresh. Priority: CLI `-r` > Settings dialog > this YAML value |
 | `report_command` | string | no | `""` | Command to open text files (reports, logs) |
 | `picture_command` | string | no | `""` | Command to open picture files |
 

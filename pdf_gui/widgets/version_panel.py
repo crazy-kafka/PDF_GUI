@@ -1,5 +1,4 @@
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFontMetrics
 from PyQt5.QtWidgets import (QFrame, QHBoxLayout, QLabel, QPushButton,
                              QVBoxLayout, QWidget)
 
@@ -51,12 +50,10 @@ class VersionPanel(QWidget):
         self._fold_btn.clicked.connect(self._toggle_fold)
         hlayout.addWidget(self._fold_btn)
 
-        fm = QFontMetrics(self.font())
         name = self._version.name
-        elided = fm.elidedText(f"Version: {name}", Qt.ElideRight, 800)
-        name_label = QLabel(elided)
+        name_label = QLabel(f"Version: {name}")
         name_label.setStyleSheet("color: white; font-weight: bold;")
-        name_label.setToolTip(name)
+        name_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         hlayout.addWidget(name_label)
 
         hlayout.addStretch()
@@ -78,6 +75,9 @@ class VersionPanel(QWidget):
         self._collapsed = not self._collapsed
         self._table.setVisible(not self._collapsed)
         self._fold_btn.setText("+" if self._collapsed else "−")
+
+    def resize_for_font(self):
+        self._table.resize_for_font()
 
     def is_collapsed(self) -> bool:
         return self._collapsed

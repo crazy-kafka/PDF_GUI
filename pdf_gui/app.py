@@ -12,6 +12,9 @@ from pdf_gui.services.data_loader import load_versions
 from pdf_gui.services.file_scanner import scan_runs
 from pdf_gui.utils.log import get_logger
 from pdf_gui.widgets.export_dialog import ExportDialog
+from pdf_gui.services.dataframe_builder import build_dataframe
+from pdf_gui.widgets.chart_dialog import ChartDialog
+from pdf_gui.widgets.chart_window import ChartWindow
 from pdf_gui.widgets.settings_dialog import SettingsDialog
 from pdf_gui.widgets.sort_dialog import SortDialog, apply_sort
 from pdf_gui.widgets.sidebar import Sidebar
@@ -32,6 +35,8 @@ class MainWindow(QMainWindow):
         self._config_mtime = 0
         self._fold_states: dict[str, bool] = {}
         self._sort_config: dict = {"rule": "date"}
+        self._panels: list[VersionPanel] = []
+        self._dataframe = None
 
         self._config = self._reload_config()
         self._init_ui()
@@ -61,6 +66,7 @@ class MainWindow(QMainWindow):
         self._toolbar.settings_clicked.connect(self._open_settings)
         self._toolbar.export_clicked.connect(self._open_export)
         self._toolbar.sort_clicked.connect(self._open_sort)
+        self._toolbar.chart_clicked.connect(self._open_chart)
         self.addToolBar(self._toolbar)
 
         self._sidebar = Sidebar(self._config)
@@ -129,15 +135,18 @@ class MainWindow(QMainWindow):
                      sc["step_name"], sc["metric_key"],
                      "ascending" if sc.get("ascending") else "descending")
 
+        self._dataframe = build_dataframe(versions, self._config)
+        self._rebuild_ui(versions)
+        log.info("Refresh complete: %d versions loaded", len(versions))
+
+    def _rebuild_ui(self, versions):
         self.setUpdatesEnabled(False)
 
-        # Save fold states for existing panels
         for i in range(self._scroll_layout.count()):
             w = self._scroll_layout.itemAt(i).widget()
             if isinstance(w, VersionPanel):
                 self._fold_states[w.version_name()] = w.is_collapsed()
 
-        # Remove existing panels (but not the stretch at the end)
         while self._scroll_layout.count() > 1:
             item = self._scroll_layout.takeAt(0)
             if item.widget():
@@ -153,13 +162,9 @@ class MainWindow(QMainWindow):
 
         self._sidebar.rebuild(versions)
 
-        self._sb_wrapper.update(
-            len(versions),
-            versions[0].name if versions else "",
-        )
+        self._sb_wrapper.update(versions, self._sort_config)
 
         self.setUpdatesEnabled(True)
-        log.info("Refresh complete: %d versions loaded", len(versions))
 
     def _get_refresh_command(self) -> str:
         if self._cli_refresh_command is not None:
@@ -181,11 +186,32 @@ class MainWindow(QMainWindow):
         dialog = ExportDialog(versions, self._config, self)
         dialog.exec_()
 
+    def _open_chart(self):
+        if self._dataframe is None or self._dataframe.empty:
+            return
+        dialog = ChartDialog(self._dataframe, self._config, self)
+        if dialog.exec_() == ChartDialog.Accepted:
+            chart_config = dialog.result()
+            if chart_config is None:
+                return
+            window = ChartWindow(chart_config, self)
+            window.show()
+            if not hasattr(self, "_chart_windows"):
+                self._chart_windows = []
+            self._chart_windows.append(window)
+
     def _open_sort(self):
         dialog = SortDialog(self._config, self._sort_config, self)
         if dialog.exec_() == SortDialog.Accepted:
             self._sort_config = dialog.result()
-            self.refresh()
+            versions = [p._version for p in self._panels]
+            versions = apply_sort(versions, self._sort_config)
+            if self._sort_config.get("rule") == "metric":
+                sc = self._sort_config
+                log.info("Sorted by %s/%s (%s)",
+                         sc["step_name"], sc["metric_key"],
+                         "ascending" if sc.get("ascending") else "descending")
+            self._rebuild_ui(versions)
 
     def _scroll_to_version(self, name: str):
         for panel in self._panels:
@@ -196,3 +222,5 @@ class MainWindow(QMainWindow):
     def _apply_font(self, family: str, size: int):
         font = QFont(family, size)
         QApplication.setFont(font)
+        for panel in self._panels:
+            panel.resize_for_font()

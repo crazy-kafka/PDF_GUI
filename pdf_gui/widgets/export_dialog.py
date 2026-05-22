@@ -165,6 +165,8 @@ class ExportDialog(QDialog):
     def _write_excel(self, path: str, versions: List[Version]):
         try:
             import openpyxl
+            from openpyxl.styles import (Alignment, Border, Font, PatternFill,
+                                         Side)
         except ImportError:
             QMessageBox.warning(
                 self, "Missing Dependency",
@@ -174,13 +176,78 @@ class ExportDialog(QDialog):
             self._write_csv(path, versions)
             return
 
+        STATUS_FILLS = {
+            "SUCCESS": PatternFill(start_color="C8E6C9", end_color="C8E6C9",
+                                   fill_type="solid"),
+            "RUNNING": PatternFill(start_color="BBDEFB", end_color="BBDEFB",
+                                   fill_type="solid"),
+            "FAIL": PatternFill(start_color="FFCDD2", end_color="FFCDD2",
+                                fill_type="solid"),
+            "PENDING": PatternFill(start_color="FFE0B2", end_color="FFE0B2",
+                                   fill_type="solid"),
+        }
+        HEADER_FILL = PatternFill(start_color="37474F", end_color="37474F",
+                                  fill_type="solid")
+        HEADER_FONT = Font(bold=True, color="FFFFFF")
+        THIN_BORDER = Border(
+            left=Side(style="thin"), right=Side(style="thin"),
+            top=Side(style="thin"), bottom=Side(style="thin"))
+        WRAP_ALIGN = Alignment(wrap_text=True, vertical="top")
+
         wb = openpyxl.Workbook()
-        wb.remove(wb.active)
-        columns = self._build_columns()
+        ws = wb.active
+        ws.title = "Versions"
+        columns = ["Version"] + self._build_columns()
+        col_count = len(columns)
+
+        # header row
+        for ci, col_name in enumerate(columns, 1):
+            cell = ws.cell(row=1, column=ci, value=col_name)
+            cell.fill = HEADER_FILL
+            cell.font = HEADER_FONT
+            cell.border = THIN_BORDER
+            cell.alignment = Alignment(horizontal="center")
+
+        row = 2  # current write row (1-indexed)
         for v in versions:
-            sheet_name = v.name[:31]
-            ws = wb.create_sheet(title=sheet_name)
-            ws.append(columns)
-            for row in self._build_rows(v):
-                ws.append(row)
+            start_row = row
+            data_rows = self._build_rows(v)
+            for dr in data_rows:
+                for ci, val in enumerate(dr, 2):  # column B onward
+                    cell = ws.cell(row=row, column=ci, value=val)
+                    cell.border = THIN_BORDER
+                row += 1
+            end_row = row - 1
+
+            # merge version column + write version info
+            if end_row >= start_row:
+                ws.merge_cells(start_row=start_row, start_column=1,
+                               end_row=end_row, end_column=1)
+            ver_cell = ws.cell(row=start_row, column=1,
+                               value=f"{v.name}\n({v.status.value})")
+            ver_cell.fill = STATUS_FILLS.get(v.status.value,
+                                             STATUS_FILLS["PENDING"])
+            ver_cell.font = Font(bold=True)
+            ver_cell.alignment = WRAP_ALIGN
+            ver_cell.border = THIN_BORDER
+            # apply border to all cells in merged range
+            for r in range(start_row, end_row + 1):
+                ws.cell(row=r, column=1).border = THIN_BORDER
+
+            row += 1  # blank row between versions
+
+        # auto-fit column widths
+        for ci in range(1, col_count + 1):
+            max_width = 8
+            for r in range(1, row):
+                cell = ws.cell(row=r, column=ci)
+                if cell.value:
+                    text = str(cell.value)
+                    # approximate: each char ~1.1 units, cap version col at 50 chars
+                    line_max = max(len(line) for line in text.split("\n"))
+                    w = min(line_max * 1.15 + 2, 55 if ci == 1 else 40)
+                    if w > max_width:
+                        max_width = w
+            ws.column_dimensions[openpyxl.utils.get_column_letter(ci)].width = max_width
+
         wb.save(path)

@@ -2,6 +2,7 @@ import csv
 import os
 import tempfile
 
+import pytest
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 
@@ -142,3 +143,38 @@ def test_format_switches_extension():
 
     dialog._format_combo.setCurrentIndex(0)  # back to CSV
     assert dialog._path_edit.text() == "export.csv"
+
+
+def test_xlsx_export():
+    pytest.importorskip("openpyxl")
+    import openpyxl
+
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+
+    config = make_config()
+    versions = [
+        make_version("v1", OverallStatus.SUCCESS, wns=-0.050, tns=-3.45),
+        make_version("v2", OverallStatus.RUNNING, wns=-0.100, tns=-8.00),
+    ]
+    dialog = ExportDialog(versions, config)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "test.xlsx")
+        dialog._write_excel(path, versions)
+        assert os.path.isfile(path)
+        wb = openpyxl.load_workbook(path)
+        assert wb.sheetnames == ["Versions"]
+        ws = wb.active
+
+        # header row
+        assert ws.cell(1, 1).value == "Version"
+        assert ws.cell(1, 2).value == "Step"
+
+        # v1: cell A2 = "v1\n(SUCCESS)", merged across rows
+        assert ws.cell(2, 1).value == "v1\n(SUCCESS)"
+        assert ws.cell(2, 2).value == "Init"
+
+        # verify merge
+        merged = [str(m) for m in ws.merged_cells.ranges]
+        assert any("A2" in m for m in merged)

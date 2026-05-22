@@ -31,7 +31,8 @@ class MetricTable(QTableWidget):
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.verticalHeader().setVisible(False)
         self.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.setSelectionMode(QAbstractItemView.NoSelection)
         self.setAlternatingRowColors(True)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_context_menu)
@@ -50,6 +51,21 @@ class MetricTable(QTableWidget):
 
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        height = self.horizontalHeader().height() + 4
+        for i in range(self.rowCount()):
+            height += self.rowHeight(i)
+        self.setFixedHeight(height)
+
+    def resize_for_font(self):
+        """Recompute column widths and table height after font change."""
+        self.resizeColumnsToContents()
+        for col in range(self.columnCount()):
+            if self.columnWidth(col) < 55:
+                self.setColumnWidth(col, 55)
+        if self.columnCount() > 0:
+            self.setColumnWidth(0, max(self.columnWidth(0), 70))
+        if self._has_logs:
+            self.setColumnWidth(self.columnCount() - 1, 55)
         height = self.horizontalHeader().height() + 4
         for i in range(self.rowCount()):
             height += self.rowHeight(i)

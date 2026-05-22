@@ -126,7 +126,7 @@ runs/
 - **Right panel**: Stacked version tables, foldable with `[−]`/`[+]` buttons. Metric table columns sized to content. Colored job status text.
 - **Right-click** metric cells to open reports and pictures (separate sections in menu). Configurable via `report_command`/`picture_command` in Settings.
 - **Log button** per step row — opens step-specific log files.
-- **Toolbar**: Refresh, Settings (refresh script, text/picture open commands), Export (CSV/Excel), Sort (date or metric-based).
+- **Toolbar**: Refresh, Settings (refresh script, text/picture open commands), Export (CSV/Excel), Sort (date or metric-based), Chart (cross-version visualization).
 
 ## CLI
 
@@ -148,18 +148,21 @@ pdf_gui/
 │   ├── run_data.py      # Version, Step, Job, enums
 │   └── config.py        # FlowConfig + YAML parser
 ├── services/
-│   ├── file_scanner.py  # Scans runs/ for timestamped dirs
-│   └── data_loader.py   # JSON → model objects
+│   ├── file_scanner.py      # Scans runs/ for timestamped dirs
+│   ├── data_loader.py       # JSON → model objects
+│   └── dataframe_builder.py # Versions → pandas DataFrame
 ├── utils/
 │   └── log.py              # Centralized logging (INFO/WARNING/ERROR)
 ├── widgets/
-│   ├── toolbar.py          # Refresh, Settings, Export, Sort, font
+│   ├── toolbar.py          # Refresh, Settings, Export, Sort, Chart, font
 │   ├── metric_table.py     # Dynamic columns, reports/pictures, Log btn
 │   ├── version_panel.py    # Foldable colored header + table
 │   ├── sidebar.py          # Resizable list, dynamic name eliding
 │   ├── settings_dialog.py  # Refresh script, text/picture commands
 │   ├── export_dialog.py    # CSV/Excel export with version selection
 │   ├── sort_dialog.py      # Sort by date or metric value
+│   ├── chart_dialog.py     # Chart config: type, step, metrics, versions
+│   ├── chart_window.py     # Matplotlib chart window with hover
 │   └── status_bar.py       # Run count + latest version
 ├── app.py                # MainWindow
 └── main.py              # Entry point (+ -r flag)
@@ -190,7 +193,19 @@ Click **Sort** in the toolbar to reorder versions by date (default) or by a metr
 
 ### Export versions
 
-Click **Export** in the toolbar, select which versions to include (all checked by default), choose CSV or Excel format, pick a file path, and export. Excel requires `openpyxl` (`pip install openpyxl`).
+Click **Export** in the toolbar, select which versions to include (all checked by default), choose CSV or Excel format, pick a file path, and export. Excel uses a single sheet with merged version column, styled headers, and auto-fitted column widths. Requires `openpyxl` (`pip install openpyxl`).
+
+### Chart versions (cross-version visualization)
+
+Click **Chart** in the toolbar to visualize metrics across versions. Select chart type, step, metrics, and versions to include.
+
+| Chart type | Description |
+|------------|-------------|
+| Line/Bar | One metric across versions, bars colored by status. Hover for full version name. |
+| Scatter | Two metrics plotted against each other (e.g., WNS vs TNS). Each point = one version. |
+| Histogram | Distribution of one metric across versions with mean/median lines. |
+
+DataModel: versions are converted to a pandas DataFrame (`pdf_gui/services/dataframe_builder.py`) once per refresh — used as the data source for all charts. Requires `matplotlib`, `pandas`.
 
 ### Logging
 

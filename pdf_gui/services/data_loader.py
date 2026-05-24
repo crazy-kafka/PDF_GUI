@@ -3,7 +3,8 @@ import os
 from typing import List
 
 from pdf_gui.models.config import FlowConfig
-from pdf_gui.models.run_data import Job, OverallStatus, Step, StepStatus, Version
+from pdf_gui.models.run_data import (Job, OverallStatus, Step, StepStatus,
+                                     Version, compute_latest_step_name)
 from pdf_gui.utils.log import get_logger
 
 log = get_logger()
@@ -16,7 +17,7 @@ def _parse_step_status(raw: str) -> StepStatus:
         return StepStatus.PENDING
 
 
-def _derive_overall(steps: List[Step]) -> OverallStatus:
+def derive_overall(steps: List[Step]) -> OverallStatus:
     statuses = {s.status for s in steps}
     if StepStatus.FAIL in statuses:
         return OverallStatus.FAIL
@@ -30,11 +31,6 @@ def _derive_overall(steps: List[Step]) -> OverallStatus:
     return OverallStatus.RUNNING
 
 
-def _latest_step_name(steps: List[Step]) -> str:
-    for s in reversed(steps):
-        if s.status != StepStatus.PENDING:
-            return s.name
-    return ""
 
 
 def load_versions(run_dirs: List[str], config: FlowConfig) -> List[Version]:
@@ -51,8 +47,23 @@ def load_versions(run_dirs: List[str], config: FlowConfig) -> List[Version]:
             log.warning("run_info.json not found in %s, using dir name", dir_path)
 
         steps = []
-        for sc in config.steps:
-            step_json_path = os.path.join(dir_path, f"{sc.name}.json")
+        all_step_names = []
+        seen = set()
+        for g in config.step_groups:
+            for sn in [s.name for s in g.steps]:
+                if sn not in seen:
+                    seen.add(sn)
+                    all_step_names.append(sn)
+        all_metric_keys = []
+        seen_m = set()
+        for g in config.step_groups:
+            for m in g.metrics:
+                if m.key not in seen_m:
+                    seen_m.add(m.key)
+                    all_metric_keys.append(m.key)
+
+        for step_name in all_step_names:
+            step_json_path = os.path.join(dir_path, f"{step_name}.json")
             if not os.path.isfile(step_json_path):
                 log.debug("Step file not found: %s (skipped)", step_json_path)
                 continue
@@ -67,9 +78,9 @@ def load_versions(run_dirs: List[str], config: FlowConfig) -> List[Version]:
             status = _parse_step_status(data.get("status", ""))
 
             metrics = {}
-            for mc in config.metrics:
-                val = data.get("metrics", {}).get(mc.key)
-                metrics[mc.key] = float(val) if val is not None else None
+            for mk in all_metric_keys:
+                val = data.get("metrics", {}).get(mk)
+                metrics[mk] = float(val) if val is not None else None
 
             job = None
             job_raw = data.get("job")
@@ -87,14 +98,14 @@ def load_versions(run_dirs: List[str], config: FlowConfig) -> List[Version]:
                 )
 
             steps.append(Step(
-                name=sc.name,
+                name=step_name,
                 status=status,
                 metrics=metrics,
                 job=job,
             ))
 
-        overall = _derive_overall(steps)
-        latest = _latest_step_name(steps)
+        overall = derive_overall(steps)
+        latest = compute_latest_step_name(steps)
 
         versions.append(Version(
             name=version_name,

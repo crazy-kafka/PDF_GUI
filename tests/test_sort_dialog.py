@@ -1,8 +1,8 @@
 from PyQt5.QtWidgets import QApplication
 
-from pdf_gui.models.config import FlowConfig, MetricConfig, StepConfig
-from pdf_gui.models.run_data import (OverallStatus, Step, StepStatus,
-                                     Version)
+from pdf_gui.models.config import FlowConfig, MetricConfig, StepConfig, StepGroupConfig
+from pdf_gui.models.run_data import (GroupedVersion, OverallStatus, Step,
+                                     StepStatus, Version)
 from pdf_gui.widgets.sort_dialog import (SortDialog,
                                          apply_sort,
                                          MISSING_PUSH_BOTTOM,
@@ -12,31 +12,28 @@ from pdf_gui.widgets.sort_dialog import (SortDialog,
 
 def make_config():
     return FlowConfig(
-        steps=[
-            StepConfig(name="init"),
-            StepConfig(name="place"),
-            StepConfig(name="route"),
-        ],
-        metrics=[
-            MetricConfig(key="WNS"),
-            MetricConfig(key="TNS"),
-        ],
+        step_groups=[StepGroupConfig(
+            name="All",
+            steps=["init", "place", "route"],
+            metrics=[MetricConfig(key="WNS"), MetricConfig(key="TNS")],
+        )],
     )
 
 
 def make_version(name: str, init_wns=None, init_tns=None):
     steps = []
-    for sc in make_config().steps:
+    for step_name in ["init", "place", "route"]:
         metrics = {}
-        if sc.name == "init":
+        if step_name == "init":
             metrics = {"WNS": init_wns, "TNS": init_tns}
-        elif sc.name == "place" and init_wns is not None:
+        elif step_name == "place" and init_wns is not None:
             metrics = {"WNS": init_wns + 0.01 if init_wns else None,
                        "TNS": init_tns + 1.0 if init_tns else None}
-        s = Step(name=sc.name, status=StepStatus.SUCCESS, metrics=metrics)
+        s = Step(name=step_name, status=StepStatus.SUCCESS, metrics=metrics)
         steps.append(s)
-    return Version(name=name, dir_path="/tmp", status=OverallStatus.SUCCESS,
-                   steps=steps, latest_step="route")
+    return GroupedVersion(name=name, dir_path="/tmp",
+                          status=OverallStatus.SUCCESS,
+                          steps=steps, latest_step="route")
 
 
 def test_sort_dialog_default_date():
@@ -82,7 +79,7 @@ def test_metric_sort_ascending():
 
 def test_metric_sort_missing_push_bottom():
     # v3 has no "init" step — only 2 steps
-    v3 = Version(name="v3", dir_path="/tmp", status=OverallStatus.SUCCESS,
+    v3 = GroupedVersion(name="v3", dir_path="/tmp", status=OverallStatus.SUCCESS,
                  steps=[
                      Step(name="place", status=StepStatus.SUCCESS,
                           metrics={"WNS": -0.100}),
@@ -101,7 +98,7 @@ def test_metric_sort_missing_push_bottom():
 
 
 def test_metric_sort_missing_exclude():
-    v3 = Version(name="v3", dir_path="/tmp", status=OverallStatus.SUCCESS,
+    v3 = GroupedVersion(name="v3", dir_path="/tmp", status=OverallStatus.SUCCESS,
                  steps=[
                      Step(name="place", status=StepStatus.SUCCESS,
                           metrics={"WNS": -0.100}),
@@ -117,6 +114,21 @@ def test_metric_sort_missing_exclude():
     assert len(result) == 2
     assert result[0].name == "v1"
     assert result[1].name == "v2"
+
+
+def test_metric_sort_with_grouped_version():
+    """Sort works correctly on GroupedVersion objects."""
+    versions = [
+        make_version("v1", init_wns=-0.500),
+        make_version("v2", init_wns=-0.050),
+        make_version("v3", init_wns=-0.100),
+    ]
+    config = {"rule": "metric", "step_name": "init", "metric_key": "WNS",
+              "ascending": True, "missing": MISSING_PUSH_BOTTOM}
+    result = apply_sort(versions, config)
+    assert result[0].name == "v1"  # -0.500
+    assert result[1].name == "v3"  # -0.100
+    assert result[2].name == "v2"  # -0.050
 
 
 def test_date_sort_preserves_scanner_order():

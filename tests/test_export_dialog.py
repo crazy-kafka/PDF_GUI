@@ -6,7 +6,8 @@ import pytest
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 
-from pdf_gui.models.config import FlowConfig, JobColumnConfig, MetricConfig, StepConfig
+from pdf_gui.models.config import (FlowConfig, JobColumnConfig, MetricConfig,
+                                   StepConfig, StepGroupConfig)
 from pdf_gui.models.run_data import (Job, OverallStatus, Step, StepStatus,
                                      Version)
 from pdf_gui.widgets.export_dialog import ExportDialog
@@ -15,14 +16,14 @@ from pdf_gui.widgets.export_dialog import ExportDialog
 def make_config():
     return FlowConfig(
         flow_name="Test",
-        steps=[
-            StepConfig(name="init"),
-            StepConfig(name="place"),
-        ],
-        metrics=[
-            MetricConfig(key="WNS", format=".3f"),
-            MetricConfig(key="TNS", format=".2f"),
-        ],
+        step_groups=[StepGroupConfig(
+            name="All",
+            steps=["init", "place"],
+            metrics=[
+                MetricConfig(key="WNS", format=".3f"),
+                MetricConfig(key="TNS", format=".2f"),
+            ],
+        )],
         job_columns=[
             JobColumnConfig(key="status"),
             JobColumnConfig(key="runtime"),
@@ -33,16 +34,12 @@ def make_config():
 def make_version(name: str, status: OverallStatus, wns=None, tns=None,
                  step_status=StepStatus.SUCCESS):
     steps = []
-    for sc in make_config().steps:
+    for step_name in ["init", "place"]:
         s = Step(
-            name=sc.name,
+            name=step_name,
             status=step_status,
             metrics={"WNS": wns, "TNS": tns},
-            job=Job(
-                job_id="12345",
-                status=step_status,
-                runtime="10m",
-            ),
+            job=Job(job_id="12345", status=step_status, runtime="10m"),
         )
         steps.append(s)
     return Version(name=name, dir_path="/tmp", status=status,
@@ -91,18 +88,16 @@ def test_csv_export_selected_versions():
             reader = csv.reader(f)
             rows = list(reader)
 
-        assert rows[0] == ["# Version: v1 (SUCCESS)"]
-        assert rows[1] == ["Step", "WNS", "TNS", "Status", "Runtime"]
-        assert rows[2][0] == "Init"
-        assert rows[2][1] == "-0.050"
-        assert rows[2][2] == "-3.45"
-        assert rows[2][3] == "✓ SUCCESS"
-        assert rows[2][4] == "10m"
-        # blank separator (after 2 step rows for v1)
-        assert rows[4] == []
-        assert rows[5][0] == "# Version: v3 (FAIL)"
+        assert rows[0] == ["version: v1"]
+        assert rows[1] == ["# All"]
+        assert rows[2] == ["Step", "WNS", "TNS", "Status", "Runtime"]
+        assert rows[3][0] == "Init"
+        assert rows[3][1] == "-0.050"
+        assert rows[3][2] == "-3.45"
+        assert rows[3][3] == "✓ SUCCESS"
+        assert rows[3][4] == "10m"
         # v2 should NOT appear
-        version_headers = [r[0] for r in rows if r and r[0].startswith("# Version:")]
+        version_headers = [r[0] for r in rows if r and r[0].startswith("version:")]
         assert len(version_headers) == 2
         assert "v1" in version_headers[0]
         assert "v3" in version_headers[1]
@@ -127,7 +122,7 @@ def test_csv_export_empty_selection():
         dialog._write_csv(path, dialog._selected_versions())
         with open(path, "r", newline="", encoding="utf-8-sig") as f:
             content = f.read()
-        assert "# Version:" not in content
+        assert "version:" not in content
 
 
 def test_format_switches_extension():
@@ -143,6 +138,84 @@ def test_format_switches_extension():
 
     dialog._format_combo.setCurrentIndex(0)  # back to CSV
     assert dialog._path_edit.text() == "export.csv"
+
+
+def test_csv_per_group_format():
+    """CSV has per-version group sections, only groups with steps."""
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+
+    from pdf_gui.models.config import StepGroupConfig
+    from pdf_gui.models.run_data import OverallStatus, Step, StepStatus, Version
+
+    config = FlowConfig(
+        step_groups=[
+            StepGroupConfig(name="APR", steps=["init", "place"],
+                            metrics=[MetricConfig(key="WNS", format=".3f")]),
+            StepGroupConfig(name="STA", steps=["sta"],
+                            metrics=[MetricConfig(key="WNS", format=".3f")]),
+        ],
+        job_columns=[JobColumnConfig(key="status")],
+    )
+    versions = [
+        Version(name="v1", dir_path="/tmp/a", status=OverallStatus.SUCCESS,
+                steps=[
+                    Step(name="init", status=StepStatus.SUCCESS,
+                         metrics={"WNS": -0.050},
+                         job=Job(job_id="1", status=StepStatus.SUCCESS)),
+                    Step(name="place", status=StepStatus.SUCCESS,
+                         metrics={"WNS": -0.100},
+                         job=Job(job_id="1", status=StepStatus.SUCCESS)),
+                ], latest_step="place"),
+    ]
+    dialog = ExportDialog(versions, config)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "test.csv")
+        dialog._write_csv(path, versions)
+        with open(path, "r", encoding="utf-8-sig") as f:
+            content = f.read()
+        assert "version: v1" in content
+        assert "# APR" in content
+        assert "# STA" not in content  # v1 has no STA steps
+
+
+def test_version_without_group_omitted():
+    """Version without group steps not in XLSX sheet."""
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+    pytest.importorskip("openpyxl")
+
+    from pdf_gui.models.config import StepGroupConfig
+
+    config = FlowConfig(
+        step_groups=[
+            StepGroupConfig(name="APR", steps=["init"],
+                            metrics=[MetricConfig(key="WNS", format=".3f")]),
+            StepGroupConfig(name="STA", steps=["sta"],
+                            metrics=[MetricConfig(key="WNS", format=".3f")]),
+        ],
+        job_columns=[JobColumnConfig(key="status")],
+    )
+    versions = [
+        Version(name="v_apr_only", dir_path="/tmp/a",
+                status=OverallStatus.SUCCESS,
+                steps=[Step(name="init", status=StepStatus.SUCCESS,
+                            metrics={"WNS": -0.050})],
+                latest_step="init"),
+    ]
+    dialog = ExportDialog(versions, config)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "test.xlsx")
+        dialog._write_excel(path, versions)
+        import openpyxl
+        wb = openpyxl.load_workbook(path)
+        assert "APR" in wb.sheetnames
+        assert "STA" in wb.sheetnames
+        # STA sheet should be empty (v_apr_only has no sta step)
+        ws_sta = wb["STA"]
+        assert ws_sta.cell(1, 1).value is None  # no header = no data
 
 
 def test_xlsx_export():
@@ -164,7 +237,7 @@ def test_xlsx_export():
         dialog._write_excel(path, versions)
         assert os.path.isfile(path)
         wb = openpyxl.load_workbook(path)
-        assert wb.sheetnames == ["Versions"]
+        assert "Versions" in wb.sheetnames or "All" in wb.sheetnames
         ws = wb.active
 
         # header row

@@ -8,8 +8,10 @@ from PyQt5.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox,
                              QListWidget, QListWidgetItem, QMessageBox,
                              QPushButton, QVBoxLayout)
 
-from pdf_gui.models.config import FlowConfig
-from pdf_gui.models.run_data import StepStatus, Version
+from pdf_gui.models.config import FlowConfig, StepGroupConfig
+from pdf_gui.models.run_data import (GroupedVersion, StepStatus, Version,
+                                     make_grouped_versions)
+from pdf_gui.services.data_loader import derive_overall
 from pdf_gui.utils.log import get_logger
 
 log = get_logger()
@@ -26,7 +28,7 @@ class ExportDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        # version list with checkboxes
+        # version list with checkboxes (show global status)
         self._list = QListWidget()
         for v in versions:
             item = QListWidgetItem(f"{v.name} ({v.status.value})")
@@ -120,12 +122,35 @@ class ExportDialog(QDialog):
         log.info("Exported %d versions to %s", len(versions), path)
         self.accept()
 
-    def _build_columns(self):
-        return ["Step"] + [m.label for m in self._config.metrics] + \
+    def _build_step_labels(self) -> dict[str, str]:
+        """Map step name → label from config or groups."""
+        labels = {}
+        if self._config.step_groups:
+            for g in self._config.step_groups:
+                for sn in [s.name for s in g.steps]:
+                    if sn not in labels:
+                        labels[sn] = sn
+        for sc in self._config.steps:
+            labels[sc.name] = sc.label
+        return labels
+
+    def _build_columns(self, group_config: StepGroupConfig = None):
+        if group_config:
+            metrics = group_config.metrics
+        else:
+            seen = set()
+            metrics = []
+            for g in self._config.step_groups:
+                for m in g.metrics:
+                    if m.key not in seen:
+                        seen.add(m.key)
+                        metrics.append(m)
+        return ["Step"] + [m.label for m in metrics] + \
                [c.label for c in self._config.job_columns]
 
-    def _build_rows(self, version: Version):
-        sc_map = {sc.name: sc for sc in self._config.steps}
+    def _build_rows(self, gv: GroupedVersion, group_config: StepGroupConfig = None):
+        eff_metrics = group_config.metrics if group_config else [
+            m for g in self._config.step_groups for m in g.metrics]
         icon_map = {
             StepStatus.SUCCESS: self._config.icons.SUCCESS,
             StepStatus.FAIL: self._config.icons.FAIL,
@@ -133,10 +158,9 @@ class ExportDialog(QDialog):
             StepStatus.PENDING: self._config.icons.PENDING,
         }
         rows = []
-        for step in version.steps:
-            sc = sc_map.get(step.name)
-            row = [sc.label if sc else step.name]
-            for mc in self._config.metrics:
+        for step in gv.steps:
+            row = [step.name.title()]
+            for mc in eff_metrics:
                 val = step.metrics.get(mc.key)
                 row.append(format(val, mc.format) if val is not None else "—")
             for jc in self._config.job_columns:
@@ -151,30 +175,29 @@ class ExportDialog(QDialog):
         return rows
 
     def _write_csv(self, path: str, versions: List[Version]):
-        columns = self._build_columns()
         with open(path, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
-            for i, v in enumerate(versions):
-                if i > 0:
+            first_ver = True
+            for v in versions:
+                if not first_ver:
                     writer.writerow([])
-                writer.writerow([f"# Version: {v.name} ({v.status.value})"])
-                writer.writerow(columns)
-                for row in self._build_rows(v):
-                    writer.writerow(row)
+                first_ver = False
+                writer.writerow([f"version: {v.name}"])
+                for g in self._config.step_groups:
+                    gv_list = make_grouped_versions([v], [s.name for s in g.steps], derive_overall)
+                    if not gv_list:
+                        continue
+                    gv = gv_list[0]
+                    columns = self._build_columns(g)
+                    writer.writerow([f"# {g.label or g.name}"])
+                    writer.writerow(columns)
+                    for row in self._build_rows(gv, g):
+                        writer.writerow(row)
+                    writer.writerow([])
 
-    def _write_excel(self, path: str, versions: List[Version]):
-        try:
-            import openpyxl
-            from openpyxl.styles import (Alignment, Border, Font, PatternFill,
-                                         Side)
-        except ImportError:
-            QMessageBox.warning(
-                self, "Missing Dependency",
-                "openpyxl is required for Excel export.\n"
-                "Install it with: pip install openpyxl\n\n"
-                "Falling back to CSV format.")
-            self._write_csv(path, versions)
-            return
+    def _write_excel_sheet(self, ws, versions, group_config, openpyxl):
+        from openpyxl.styles import (Alignment, Border, Font, PatternFill,
+                                     Side)
 
         STATUS_FILLS = {
             "SUCCESS": PatternFill(start_color="C8E6C9", end_color="C8E6C9",
@@ -194,13 +217,16 @@ class ExportDialog(QDialog):
             top=Side(style="thin"), bottom=Side(style="thin"))
         WRAP_ALIGN = Alignment(wrap_text=True, vertical="top")
 
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Versions"
-        columns = ["Version"] + self._build_columns()
+        # filter: only versions with steps in this group
+        gv_list = [gv for v in versions
+                   if (gv_list := make_grouped_versions([v], [s.name for s in group_config.steps], derive_overall))
+                   for gv in gv_list]
+        if not gv_list:
+            return
+
+        columns = ["Version"] + self._build_columns(group_config)
         col_count = len(columns)
 
-        # header row
         for ci, col_name in enumerate(columns, 1):
             cell = ws.cell(row=1, column=ci, value=col_name)
             cell.fill = HEADER_FILL
@@ -208,46 +234,64 @@ class ExportDialog(QDialog):
             cell.border = THIN_BORDER
             cell.alignment = Alignment(horizontal="center")
 
-        row = 2  # current write row (1-indexed)
-        for v in versions:
+        row = 2
+        for gv in gv_list:
             start_row = row
-            data_rows = self._build_rows(v)
+            data_rows = self._build_rows(gv, group_config)
             for dr in data_rows:
-                for ci, val in enumerate(dr, 2):  # column B onward
+                for ci, val in enumerate(dr, 2):
                     cell = ws.cell(row=row, column=ci, value=val)
                     cell.border = THIN_BORDER
                 row += 1
             end_row = row - 1
 
-            # merge version column + write version info
             if end_row >= start_row:
                 ws.merge_cells(start_row=start_row, start_column=1,
                                end_row=end_row, end_column=1)
             ver_cell = ws.cell(row=start_row, column=1,
-                               value=f"{v.name}\n({v.status.value})")
-            ver_cell.fill = STATUS_FILLS.get(v.status.value,
+                               value=f"{gv.name}\n({gv.status.value})")
+            ver_cell.fill = STATUS_FILLS.get(gv.status.value,
                                              STATUS_FILLS["PENDING"])
             ver_cell.font = Font(bold=True)
             ver_cell.alignment = WRAP_ALIGN
             ver_cell.border = THIN_BORDER
-            # apply border to all cells in merged range
             for r in range(start_row, end_row + 1):
                 ws.cell(row=r, column=1).border = THIN_BORDER
+            row += 1
 
-            row += 1  # blank row between versions
-
-        # auto-fit column widths
         for ci in range(1, col_count + 1):
             max_width = 8
             for r in range(1, row):
                 cell = ws.cell(row=r, column=ci)
                 if cell.value:
                     text = str(cell.value)
-                    # approximate: each char ~1.1 units, cap version col at 50 chars
                     line_max = max(len(line) for line in text.split("\n"))
                     w = min(line_max * 1.15 + 2, 55 if ci == 1 else 40)
                     if w > max_width:
                         max_width = w
             ws.column_dimensions[openpyxl.utils.get_column_letter(ci)].width = max_width
+
+    def _write_excel(self, path: str, versions: List[Version]):
+        try:
+            import openpyxl
+        except ImportError:
+            QMessageBox.warning(
+                self, "Missing Dependency",
+                "openpyxl is required for Excel export.\n"
+                "Install it with: pip install openpyxl\n\n"
+                "Falling back to CSV format.")
+            self._write_csv(path, versions)
+            return
+
+        wb = openpyxl.Workbook()
+        if self._config.step_groups:
+            wb.remove(wb.active)
+            for g in self._config.step_groups:
+                ws = wb.create_sheet(title=g.label or g.name)
+                self._write_excel_sheet(ws, versions, g, openpyxl)
+        else:
+            ws = wb.active
+            ws.title = "Versions"
+            self._write_excel_sheet(ws, versions, None, openpyxl)
 
         wb.save(path)

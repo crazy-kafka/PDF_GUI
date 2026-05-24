@@ -40,12 +40,21 @@ class ChartDialog(QDialog):
         type_layout.addStretch()
         layout.addLayout(type_layout)
 
+        # group filter
+        group_layout = QHBoxLayout()
+        group_layout.addWidget(QLabel("Group:"))
+        self._group_combo = QComboBox()
+        for g in config.step_groups:
+            self._group_combo.addItem(g.label or g.name, g.name)
+        self._group_combo.currentIndexChanged.connect(self._on_group_changed)
+        group_layout.addWidget(self._group_combo)
+        group_layout.addStretch()
+        layout.addLayout(group_layout)
+
         # step
         step_layout = QHBoxLayout()
         step_layout.addWidget(QLabel("Step:"))
         self._step_combo = QComboBox()
-        for sc in config.steps:
-            self._step_combo.addItem(sc.label, sc.name)
         step_layout.addWidget(self._step_combo)
         step_layout.addStretch()
         layout.addLayout(step_layout)
@@ -54,8 +63,6 @@ class ChartDialog(QDialog):
         y_layout = QHBoxLayout()
         y_layout.addWidget(QLabel("Metric (Y):"))
         self._y_combo = QComboBox()
-        for mc in config.metrics:
-            self._y_combo.addItem(mc.label, mc.key)
         y_layout.addWidget(self._y_combo)
         y_layout.addStretch()
         layout.addLayout(y_layout)
@@ -64,8 +71,6 @@ class ChartDialog(QDialog):
         x_layout = QHBoxLayout()
         x_layout.addWidget(QLabel("Metric (X):"))
         self._x_combo = QComboBox()
-        for mc in config.metrics:
-            self._x_combo.addItem(mc.label, mc.key)
         self._x_combo.setEnabled(False)
         x_layout.addWidget(self._x_combo)
         x_layout.addStretch()
@@ -74,13 +79,6 @@ class ChartDialog(QDialog):
         # version list
         layout.addWidget(QLabel("Versions:"))
         self._list = QListWidget()
-        for vname in self._all_versions:
-            vstatus = df[df["version_name"] == vname]["version_status"].iloc[0]
-            item = QListWidgetItem(f"{vname} ({vstatus})")
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Checked)
-            item.setData(Qt.UserRole, vname)
-            self._list.addItem(item)
         layout.addWidget(self._list)
 
         sel_layout = QHBoxLayout()
@@ -100,6 +98,53 @@ class ChartDialog(QDialog):
         buttons.addButton(plot_btn, QDialogButtonBox.AcceptRole)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+        self._on_group_changed()  # populate step/metric/version for first group
+
+    def _populate_step_metric(self, group_name):
+        self._step_combo.clear()
+        self._y_combo.clear()
+        self._x_combo.clear()
+        seen_s, seen_m = set(), set()
+        for g in self._config.step_groups:
+            if group_name and g.name != group_name:
+                continue
+            for sn in [s.name for s in g.steps]:
+                if sn not in seen_s:
+                    seen_s.add(sn)
+                    self._step_combo.addItem(sn, sn)
+            for m in g.metrics:
+                if m.key not in seen_m:
+                    seen_m.add(m.key)
+                    self._y_combo.addItem(m.key, m.key)
+                    self._x_combo.addItem(m.key, m.key)
+
+    def _on_group_changed(self):
+        group_name = self._group_combo.currentData()
+        self._populate_step_metric(group_name)
+        self._rebuild_version_list(group_name)
+
+    def _rebuild_version_list(self, group_name):
+        self._list.clear()
+        for g in self._config.step_groups:
+            if group_name and g.name != group_name:
+                continue
+            group_steps = set(s.name for s in g.steps)
+            for vname in self._all_versions:
+                vstatus = self._df[self._df["version_name"] == vname][
+                    "version_status"].iloc[0]
+                # check if this version has steps in group
+                v_steps = set(self._df[
+                    (self._df["version_name"] == vname) &
+                    (self._df["step_name"].isin(group_steps))
+                ]["step_name"].unique())
+                if not v_steps:
+                    continue
+                item = QListWidgetItem(f"{vname} ({vstatus})")
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(Qt.Checked)
+                item.setData(Qt.UserRole, vname)
+                self._list.addItem(item)
 
     def _set_all(self, state):
         for i in range(self._list.count()):

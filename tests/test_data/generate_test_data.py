@@ -16,6 +16,10 @@ random.seed(42)
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "runs")
 
 STEP_NAMES = ["init", "floorplan", "place", "cts", "route", "routeopt", "STA"]
+APR_STEPS = ["init", "floorplan", "place", "cts", "route", "routeopt"]
+STA_STEPS = ["setup_scen_0", "setup_scen_1", "hold_scen_0", "ptpx_scen_0"]
+PV_STEPS = ["drc", "ant", "lvs", "erc"]
+ALL_GROUP_STEPS = APR_STEPS + STA_STEPS + PV_STEPS
 METRIC_KEYS = ["WNS", "TNS", "max_cap", "max_tran", "leakage"]
 
 
@@ -62,6 +66,77 @@ def write_run_info(dir_path: str, version_name: str):
             "flow_name": "Chip Design Flow",
             "created_at": datetime.now().isoformat(),
         }, f, indent=2)
+
+
+def write_group_step(dir_path: str, step_name: str, status: str,
+                     metrics: dict, runtime: str):
+    """Write a step JSON with group-specific metrics."""
+    data = {
+        "step": step_name,
+        "status": status,
+        "metrics": metrics,
+        "job": make_job(status, runtime),
+    }
+    with open(os.path.join(dir_path, f"{step_name}.json"), "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def create_group_version(base_time: datetime, offset_minutes: int,
+                         version_name: str, apr_scenario: str = None,
+                         sta_scenario: str = None,
+                         pv_scenario: str = None) -> None:
+    """Create a version with specific scenarios per group (or skip group if None)."""
+    ts = (base_time + timedelta(minutes=offset_minutes)).strftime("%Y-%m-%d_%H%M")
+    dir_path = os.path.join(OUTPUT_DIR, f"{ts}_{version_name}")
+    os.makedirs(dir_path, exist_ok=True)
+    write_run_info(dir_path, version_name)
+
+    if apr_scenario:
+        for i, step in enumerate(APR_STEPS):
+            if apr_scenario == "SUCCESS":
+                status = "SUCCESS"; runtime = f"{random.randint(5, 40)}m"
+            elif apr_scenario == "FAIL":
+                status = "FAIL" if i == 4 else "SUCCESS"
+                runtime = f"{random.randint(20, 60)}m" if status == "FAIL" else f"{random.randint(5, 30)}m"
+            else:
+                status = "SUCCESS"; runtime = f"{random.randint(5, 40)}m"
+            metrics = make_metrics(
+                wns=round(random.uniform(-0.200, -0.010), 3),
+                tns=round(random.uniform(-8.0, -0.5), 2),
+                cap=round(random.uniform(0.01, 0.08), 4),
+                tran=round(random.uniform(0.005, 0.04), 4),
+                leak=round(random.uniform(80, 250), 2),
+            )
+            write_group_step(dir_path, step, status, metrics, runtime)
+
+    if sta_scenario:
+        for step in STA_STEPS:
+            if sta_scenario == "PENDING" and step == STA_STEPS[-1]:
+                status = "PENDING"; runtime = ""
+            else:
+                status = sta_scenario; runtime = f"{random.randint(10, 30)}m"
+            metrics = {
+                "WNS": round(random.uniform(-0.100, -0.001), 3),
+                "TNS": round(random.uniform(-3.0, 0.0), 2),
+                "max_transition": round(random.uniform(0.01, 0.05), 4),
+                "max_capacitance": round(random.uniform(0.01, 0.06), 4),
+                "min_pulse_width": round(random.uniform(0.10, 0.50), 4),
+            }
+            write_group_step(dir_path, step, status, metrics, runtime)
+
+    if pv_scenario:
+        for step in PV_STEPS:
+            if pv_scenario == "FAIL" and step == "drc":
+                status = "FAIL"; runtime = f"{random.randint(10, 30)}m"
+            else:
+                status = pv_scenario; runtime = f"{random.randint(5, 20)}m"
+            metrics = {
+                "DRC": random.randint(0, 50) if status == "SUCCESS" else random.randint(100, 500),
+                "LVS": random.randint(0, 10) if status == "SUCCESS" else random.randint(50, 200),
+                "ANT": random.randint(0, 5),
+                "ERC": random.randint(0, 3),
+            }
+            write_group_step(dir_path, step, status, metrics, runtime)
 
 
 def create_version(base_time: datetime, offset_minutes: int,
@@ -242,18 +317,19 @@ TNS:      -3.450 ns
         if os.path.isfile(run_info_path):
             with open(run_info_path, "r") as f:
                 version_name = json.load(f).get("version", version_name)
-        for step_name in STEP_NAMES:
+        for step_name in ALL_GROUP_STEPS:
             step_json = os.path.join(dir_path, f"{step_name}.json")
             if not os.path.isfile(step_json):
                 continue
 
-            # Reports
-            report_dir = os.path.join(dir_path, "reports", version_name, step_name)
-            os.makedirs(report_dir, exist_ok=True)
-            with open(os.path.join(report_dir, "timing.rpt"), "w") as f:
-                f.write(f"# Timing Report — {version_name} / {step_name}\n{sample_rpt}")
-            with open(os.path.join(report_dir, "wns_summary.rpt"), "w") as f:
-                f.write(f"# WNS Summary — {version_name} / {step_name}\nWNS: -0.050\n")
+            # Reports (only for steps that typically have timing reports)
+            if step_name in APR_STEPS + STA_STEPS:
+                report_dir = os.path.join(dir_path, "reports", version_name, step_name)
+                os.makedirs(report_dir, exist_ok=True)
+                with open(os.path.join(report_dir, "timing.rpt"), "w") as f:
+                    f.write(f"# Timing Report — {version_name} / {step_name}\n{sample_rpt}")
+                with open(os.path.join(report_dir, "wns_summary.rpt"), "w") as f:
+                    f.write(f"# WNS Summary — {version_name} / {step_name}\nWNS: -0.050\n")
 
             # Density report + picture
             rpt_dir = os.path.join(dir_path, "rpt", version_name, step_name)
@@ -265,6 +341,46 @@ TNS:      -3.450 ns
             os.makedirs(img_dir, exist_ok=True)
             with open(os.path.join(img_dir, "density.png"), "w") as f:
                 f.write("# placeholder density image\n")
+
+            # Per-step reports (WNS step_reports)
+            if step_name == "place":
+                place_rpt = os.path.join(dir_path, "reports", version_name,
+                                         "place")
+                os.makedirs(place_rpt, exist_ok=True)
+                for n in range(2):
+                    with open(os.path.join(place_rpt, f"place_opt{n}.rpt"),
+                              "w") as f:
+                        f.write(f"# Place opt{n} — {version_name}\n"
+                                f"WNS: {-0.050 - n * 0.02:.3f}\n")
+            elif step_name == "cts":
+                cts_rpt = os.path.join(dir_path, "reports", version_name, "cts")
+                os.makedirs(cts_rpt, exist_ok=True)
+                with open(os.path.join(cts_rpt, "cts_opt.rpt"), "w") as f:
+                    f.write(f"# CTS opt — {version_name}\n"
+                            f"WNS: -0.030\n")
+            elif step_name == "route":
+                route_rpt = os.path.join(dir_path, "reports", version_name,
+                                         "route")
+                os.makedirs(route_rpt, exist_ok=True)
+                for n in range(3):
+                    with open(os.path.join(route_rpt, f"route_opt{n}.rpt"),
+                              "w") as f:
+                        f.write(f"# Route opt{n} — {version_name}\n"
+                                f"WNS: {-0.020 - n * 0.01:.3f}\n")
+
+            # Per-step pictures (density step_pictures)
+            if step_name == "place":
+                os.makedirs(os.path.join(dir_path, "img", version_name, "place"),
+                            exist_ok=True)
+                with open(os.path.join(dir_path, "img", version_name,
+                                       "place", "density_place.png"), "w") as f:
+                    f.write("# placeholder density_place\n")
+            elif step_name == "cts":
+                os.makedirs(os.path.join(dir_path, "img", version_name, "cts"),
+                            exist_ok=True)
+                with open(os.path.join(dir_path, "img", version_name,
+                                       "cts", "density_cts.png"), "w") as f:
+                    f.write("# placeholder density_cts\n")
 
             # Logs
             log_dir = os.path.join(dir_path, "logs", version_name, step_name)
@@ -333,9 +449,17 @@ def gen_suite2():
 
     base_time = datetime.now()
 
-    # Add 2 new versions
+    # Add 2 new versions + group versions
     create_version(base_time, 900, "chip_CC_new_arrival", "SUCCESS")
     create_version(base_time, 930, "chip_DD_latest_fix", "RUNNING")
+
+    group_versions = [
+        ("chip_GG_full_flow", "SUCCESS", "SUCCESS", "SUCCESS"),
+        ("chip_HH_apr_only", "SUCCESS", None, None),
+        ("chip_II_sta_only", None, "RUNNING", None),
+    ]
+    for i, (name, apr, sta, pv) in enumerate(group_versions):
+        create_group_version(base_time, 940 + i * 30, name, apr, sta, pv)
 
     # Modify a few existing versions: change last SUCCESS step to RUNNING
     all_dirs = sorted(os.listdir(OUTPUT_DIR), reverse=True)
@@ -382,6 +506,19 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     _gen_base_30()
+
+    # Group-based versions (mixed coverage)
+    base_time = datetime.now()
+    group_versions = [
+        ("chip_GG_full_flow", "SUCCESS", "SUCCESS", "SUCCESS"),
+        ("chip_HH_apr_only", "SUCCESS", None, None),
+        ("chip_II_sta_only", None, "RUNNING", None),
+        ("chip_JJ_apr_sta_mixed", "SUCCESS", "SUCCESS", None),
+        ("chip_KK_apr_fail", "FAIL", "SUCCESS", "SUCCESS"),
+        ("chip_LL_pv_fail", "SUCCESS", "SUCCESS", "FAIL"),
+    ]
+    for i, (name, apr, sta, pv) in enumerate(group_versions):
+        create_group_version(base_time, 900 + i * 30, name, apr, sta, pv)
 
     # Create sample report files for the first 5 versions
     all_dirs = sorted(os.listdir(OUTPUT_DIR))

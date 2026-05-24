@@ -2,8 +2,8 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QFrame, QHBoxLayout, QLabel, QPushButton,
                              QVBoxLayout, QWidget)
 
-from pdf_gui.models.config import FlowConfig
-from pdf_gui.models.run_data import OverallStatus, Version
+from pdf_gui.models.config import FlowConfig, StepGroupConfig
+from pdf_gui.models.run_data import GroupedVersion, OverallStatus, Version
 from pdf_gui.widgets.metric_table import MetricTable
 
 STATUS_COLOR_MAP = {
@@ -15,32 +15,37 @@ STATUS_COLOR_MAP = {
 
 
 class VersionPanel(QWidget):
-    def __init__(self, version: Version, config: FlowConfig, parent=None):
+    def __init__(self, gv: GroupedVersion, config: FlowConfig,
+                 group: StepGroupConfig = None, parent=None):
         super().__init__(parent)
-        self._version = version
+        self._gv = gv
         self._config = config
+        self._group = group
         self._collapsed = False
 
         self._build_ui()
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 4)
+        layout.setContentsMargins(0, 0, 0, 2)
         layout.setSpacing(0)
 
         header = self._make_header()
         layout.addWidget(header)
 
-        self._table = MetricTable(self._version, self._config)
+        self._table = MetricTable(self._gv, self._config,
+                                  group=self._group)
         layout.addWidget(self._table)
 
     def _make_header(self) -> QFrame:
-        color = STATUS_COLOR_MAP.get(self._version.status, "#757575")
+        color = STATUS_COLOR_MAP.get(self._gv.status, "#757575")
         frame = QFrame()
+        frame.setFrameShape(QFrame.NoFrame)
         frame.setStyleSheet(
             f"QFrame {{ background-color: {color}; border-radius: 4px; }}"
         )
         frame.setFixedHeight(32)
+        frame.setContentsMargins(0, 0, 0, 0)
 
         hlayout = QHBoxLayout(frame)
         hlayout.setContentsMargins(8, 2, 8, 2)
@@ -50,7 +55,7 @@ class VersionPanel(QWidget):
         self._fold_btn.clicked.connect(self._toggle_fold)
         hlayout.addWidget(self._fold_btn)
 
-        name = self._version.name
+        name = self._gv.name
         name_label = QLabel(f"Version: {name}")
         name_label.setStyleSheet("color: white; font-weight: bold;")
         name_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -59,13 +64,13 @@ class VersionPanel(QWidget):
         hlayout.addStretch()
 
         icon = self._config.icons.SUCCESS
-        if self._version.status == OverallStatus.FAIL:
+        if self._gv.status == OverallStatus.FAIL:
             icon = self._config.icons.FAIL
-        elif self._version.status == OverallStatus.RUNNING:
+        elif self._gv.status == OverallStatus.RUNNING:
             icon = self._config.icons.RUNNING
-        elif self._version.status == OverallStatus.PENDING:
+        elif self._gv.status == OverallStatus.PENDING:
             icon = self._config.icons.PENDING
-        status_label = QLabel(f"{icon} {self._version.status.value}")
+        status_label = QLabel(f"{icon} {self._gv.status.value}")
         status_label.setStyleSheet("color: white; font-weight: bold;")
         hlayout.addWidget(status_label)
 
@@ -87,4 +92,4 @@ class VersionPanel(QWidget):
             self._toggle_fold()
 
     def version_name(self) -> str:
-        return self._version.name
+        return self._gv.name

@@ -31,39 +31,55 @@ Flow scripts write JSON files into timestamped run directories; the GUI scans an
 
 ## Configuration
 
-Flow developers define steps, metrics, reports, and job columns in `flow_config.yaml`:
+All configuration uses `step_groups` — each group defines its own steps, metrics, and tabs in the GUI.
 
 ```yaml
 flow_name: "Chip Design Flow"
-steps:
-  - name: init
-    logs:
-      - "logs/{version}/{step}/run.log"
-  - name: place
-metrics:
-  - key: WNS
-    label: "WNS"
-    format: ".3f"
-    reports:
-      - "reports/{version}/{step}/timing.rpt"
-  - key: density
-    label: "Density"
-    reports:
-      - "rpt/{version}/{step}/density.rpt"
-    pictures:
-      - "img/{version}/{step}/density.png"
+step_groups:
+  - name: APR
+    label: "APR"
+    steps:
+      - name: init
+        logs:
+          - "logs/{version}/{step}/run.log"
+      - name: place
+    metrics:
+      - key: WNS
+        label: "WNS"
+        format: ".3f"
+        reports:
+          - "reports/{version}/{step}/timing.rpt"
+        step_reports:
+          place:
+            - "reports/{version}/place/place_opt0.rpt"
+      - key: density
+        label: "Density"
+        pictures:
+          - "img/{version}/{step}/density.png"
+        step_pictures:
+          place:
+            - "img/{version}/place/density_place.png"
+  - name: STA
+    label: "STA"
+    steps:
+      - name: setup_scen_0
+        logs:
+          - "logs/{version}/{step}/run.log"
+      - name: hold_scen_0
+    metrics:
+      - key: WNS
+      - key: TNS
 job_columns:
   - key: status
   - key: runtime
 
-# Optional: script to run before each refresh
+# Optional commands
 # refresh_command: "./pull_data.sh"
-
-# Optional: custom commands to open files
-# report_command: "gvim {file}"        # text files (reports, logs)
-# picture_command: "eog {file}"        # picture files
+# report_command: "gvim {file}"
+# picture_command: "eog {file}"
 ```
 
+Each group appears as a tab in the GUI. Steps can be bare strings (`- place`) or objects with `name`/`logs`.
 Report/log/picture paths support `{version}`, `{step}`, and `{run_dir}` template variables.
 See [docs/flow_config_schema.md](docs/flow_config_schema.md) for the full schema reference.
 
@@ -104,29 +120,29 @@ runs/
 
 ```
 ┌─────────────────     ─────────────────────────────────────────────┐
-│ Toolbar: [Refresh] [Settings] [Export] [Sort]  Font: [Consolas] [10] │
+│ Toolbar: [Refresh] [Settings] [Export] [Sort] [Chart] Font: [...] │
 ├────────────     ┬─────────────────────────────────────────────────┤
-│ VERSIONS        │  QScrollArea with stacked VersionTables         │
-│                 │                                                 │
-│ ● golden        │  ┌─ [−] Version: chip_A_golden ─ ✓ pass ──────┐│
-│   STA running   │  │ Step   │ WNS    │ TNS   │ Status │ Runtime ││
-│                 │  │ synth  │ -0.095 │ -3.45 │ ✓ pass │ 35m     ││
-│ ● eco_v2        │  │ init   │   —    │  —    │ ✓ pass │ 8m      ││
-│   STA pending   │  └─────────────────────────────────────────────┘│
-│                 │                                                 │
-│ ● exp.          │  ┌─ [−] Version: chip_A_eco_v2 ─ ✓ pass ──────┐│
-│   route failed  │  │ ...                                        ││
-│                 │  └─────────────────────────────────────────────┘│
+│ VERSIONS        │ ┌─ APR ────┬─ STA ────┬─ PV ──────────────────┐│
+│                 │ │ ─────────────────────────────────────────── ││
+│ ● golden        │ │ ┌─ [−] Version: chip_A ─ ✓ SUCCESS ───────┐││
+│   SUCCESS       │ │ │ Step   │ WNS    │ TNS   │ Status │ Log  │││
+│ ● eco_v2        │ │ │ init   │ -0.095 │ -3.45 │ ✓ pass │ [Log]│││
+│   RUNNING       │ │ │ place  │ —      │ —     │ ✓ pass │ [Log]│││
+│                 │ │ └──────────────────────────────────────────┘││
+│ ● exp.          │ │ ┌─ [−] Version: chip_B ─ ⟳ RUNNING ───────┐││
+│   FAIL          │ │ │ ...                                      │││
+│                 │ └────────────────────────────────────────────┘││
+│                 └───────────────────────────────────────────────┘│
 ├────────────     ┴─────────────────────────────────────────────────┤
-│ Status: 4 runs | Latest: chip_A_in_progress                       │
+│ SUCCESS:8 | RUNNING:11 | FAIL:6 | PENDING:5 | Sort: date | ...  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-- **Left sidebar**: Version list with colored status dots (green/blue/red/orange), elided names, tooltips for full names. Status text colored per status.
-- **Right panel**: Stacked version tables, foldable with `[−]`/`[+]` buttons. Metric table columns sized to content. Colored job status text.
-- **Right-click** metric cells to open reports and pictures (separate sections in menu). Configurable via `report_command`/`picture_command` in Settings.
-- **Log button** per step row — opens step-specific log files.
-- **Toolbar**: Refresh, Settings (refresh script, text/picture open commands), Export (CSV/Excel), Sort (date or metric-based), Chart (cross-version visualization).
+- **Left sidebar**: Version list filtered to active tab group, colored status dots (green/blue/red/orange) reflecting per-group status. Status text colored per status.
+- **Right panel**: Tab widget with one tab per step group. Each tab shows version panels with only that group's steps and metrics. Foldable with `[−]`/`[+]` buttons.
+- **Right-click** metric cells to open reports and pictures (separate sections in menu). Global + per-step report/picture paths. Configurable via `report_command`/`picture_command` in Settings.
+- **Log button** per step row — opens step-specific log files (configured via `logs` on group steps).
+- **Toolbar**: Refresh, Settings, Export (CSV/Excel per-group sheets), Sort (date or metric with group filter), Chart (cross-version Bar/Scatter/Histogram).
 
 ## CLI
 

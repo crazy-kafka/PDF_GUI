@@ -45,3 +45,40 @@ class Version:
     status: OverallStatus = OverallStatus.RUNNING
     steps: List[Step] = field(default_factory=list)
     latest_step: str = ""
+
+
+@dataclass
+class GroupedVersion:
+    """A Version viewed through a single step group."""
+    name: str
+    dir_path: str
+    status: OverallStatus
+    steps: List[Step]          # only steps in this group
+    latest_step: str           # latest non-PENDING step in this group
+
+
+def compute_latest_step_name(steps: List[Step]) -> str:
+    for s in reversed(steps):
+        if s.status != StepStatus.PENDING:
+            return s.name
+    return ""
+
+
+def make_grouped_versions(versions: List[Version],
+                          group_step_names: List[str],
+                          derive_fn) -> List[GroupedVersion]:
+    """Filter versions to only those with steps in the group, derive per-group status."""
+    step_set = set(group_step_names)
+    result = []
+    for v in versions:
+        gv_steps = [s for s in v.steps if s.name in step_set]
+        if not gv_steps:
+            continue
+        result.append(GroupedVersion(
+            name=v.name,
+            dir_path=v.dir_path,
+            status=derive_fn(gv_steps),
+            steps=gv_steps,
+            latest_step=compute_latest_step_name(gv_steps),
+        ))
+    return result

@@ -1,15 +1,18 @@
 import pytest
 
-from pdf_gui.models.config import FlowConfig, MetricConfig, StepConfig
-from pdf_gui.models.run_data import (Job, OverallStatus, Step, StepStatus,
-                                     Version)
+from pdf_gui.models.config import FlowConfig, MetricConfig, StepConfig, StepGroupConfig
+from pdf_gui.models.run_data import (GroupedVersion, Job, OverallStatus, Step,
+                                     StepStatus, Version)
 from pdf_gui.services.dataframe_builder import build_dataframe
 
 
 def make_config():
     return FlowConfig(
-        steps=[StepConfig(name="init"), StepConfig(name="place")],
-        metrics=[MetricConfig(key="WNS"), MetricConfig(key="TNS")],
+        step_groups=[StepGroupConfig(
+            name="All",
+            steps=["init", "place"],
+            metrics=[MetricConfig(key="WNS"), MetricConfig(key="TNS")],
+        )],
     )
 
 
@@ -17,17 +20,17 @@ def make_version(name, init_wns=None, init_tns=None,
                  place_wns=None, place_tns=None,
                  status=OverallStatus.SUCCESS, has_job=True):
     steps = []
-    for sc in make_config().steps:
-        if sc.name == "init":
+    for step_name in ["init", "place"]:
+        if step_name == "init":
             metrics = {"WNS": init_wns, "TNS": init_tns}
         else:
             metrics = {"WNS": place_wns, "TNS": place_tns}
         job = Job(job_id="123", status=StepStatus.SUCCESS, runtime="10m",
                   memory_current_mb=4096.0, cpu_current_pct=75.0) if has_job else None
-        steps.append(Step(name=sc.name, status=StepStatus.SUCCESS,
+        steps.append(Step(name=step_name, status=StepStatus.SUCCESS,
                           metrics=metrics, job=job))
-    return Version(name=name, dir_path="/tmp", status=status,
-                   steps=steps, latest_step="place")
+    return GroupedVersion(name=name, dir_path="/tmp", status=status,
+                          steps=steps, latest_step="place")
 
 
 def test_build_dataframe_shape():

@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QHBoxLayout,
                              QWidget)
 
 from pdf_gui.models.config import FlowConfig
-from pdf_gui.models.run_data import Version
+from pdf_gui.models.run_data import GroupedVersion, Version
 
 MISSING_PUSH_BOTTOM = "Push to bottom"
 MISSING_PUSH_TOP = "Push to top"
@@ -26,6 +26,17 @@ class SortDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
+        # group filter
+        group_layout = QHBoxLayout()
+        group_layout.addWidget(QLabel("Group:"))
+        self._group_combo = QComboBox()
+        for g in config.step_groups:
+            self._group_combo.addItem(g.label or g.name, g.name)
+        self._group_combo.currentIndexChanged.connect(self._on_group_changed)
+        group_layout.addWidget(self._group_combo)
+        group_layout.addStretch()
+        layout.addLayout(group_layout)
+
         # radio buttons
         self._date_radio = QRadioButton("Date (newest first)")
         self._metric_radio = QRadioButton("Metric value")
@@ -41,8 +52,6 @@ class SortDialog(QDialog):
         step_layout = QHBoxLayout()
         step_layout.addWidget(QLabel("Step:"))
         self._step_combo = QComboBox()
-        for sc in config.steps:
-            self._step_combo.addItem(sc.label, sc.name)
         step_layout.addWidget(self._step_combo)
         step_layout.addStretch()
         metric_layout.addLayout(step_layout)
@@ -50,11 +59,11 @@ class SortDialog(QDialog):
         met_layout = QHBoxLayout()
         met_layout.addWidget(QLabel("Metric:"))
         self._metric_combo = QComboBox()
-        for mc in config.metrics:
-            self._metric_combo.addItem(mc.label, mc.key)
         met_layout.addWidget(self._metric_combo)
         met_layout.addStretch()
         metric_layout.addLayout(met_layout)
+
+        self._populate_step_metric(config, None)  # all groups
 
         order_layout = QHBoxLayout()
         order_layout.addWidget(QLabel("Order:"))
@@ -87,8 +96,10 @@ class SortDialog(QDialog):
         # restore current state
         self._restore()
         self._on_radio_toggled()
+        self._on_group_changed()  # force initial group filter
 
     def _restore(self):
+        self._group_combo.setCurrentIndex(0)  # first group
         if self._current.get("rule") == "metric":
             self._metric_radio.setChecked(True)
             step_name = self._current.get("step_name", "")
@@ -105,6 +116,26 @@ class SortDialog(QDialog):
                 self._current.get("missing", MISSING_PUSH_BOTTOM))
         else:
             self._date_radio.setChecked(True)
+
+    def _populate_step_metric(self, config, group_name):
+        self._step_combo.clear()
+        self._metric_combo.clear()
+        seen_s, seen_m = set(), set()
+        for g in config.step_groups:
+            if group_name and g.name != group_name:
+                continue
+            for sn in [s.name for s in g.steps]:
+                if sn not in seen_s:
+                    seen_s.add(sn)
+                    self._step_combo.addItem(sn, sn)
+            for m in g.metrics:
+                if m.key not in seen_m:
+                    seen_m.add(m.key)
+                    self._metric_combo.addItem(m.key, m.key)
+
+    def _on_group_changed(self):
+        group_name = self._group_combo.currentData()
+        self._populate_step_metric(self._config, group_name)
 
     def _on_radio_toggled(self):
         self._metric_widget.setEnabled(self._metric_radio.isChecked())
@@ -128,7 +159,7 @@ class SortDialog(QDialog):
 def apply_sort(versions: List[Version], sort_config: dict) -> List[Version]:
     """Return sorted list of versions. Date sort keeps scanner order."""
     if sort_config.get("rule") != "metric":
-        return list(versions)  # date order — already sorted by scanner
+        return sorted(versions, key=lambda v: v.dir_path, reverse=True)
 
     step_name = sort_config["step_name"]
     metric_key = sort_config["metric_key"]

@@ -1,61 +1,100 @@
 flow_name: "Chip Design Flow"
 
-steps:
-  - name: init
-    label: "Initialize"
-    logs:
-      - "logs/{version}/{step}/run.log"
-  - name: floorplan
-    label: "Floorplan"
-    logs:
-      - "logs/{version}/{step}/run.log"
-  - name: place
-    label: "Placement"
-    logs:
-      - "logs/{version}/{step}/run.log"
-  - name: cts
-    label: "Clock Tree"
-    logs:
-      - "logs/{version}/{step}/run.log"
-  - name: route
-    label: "Routing"
-    logs:
-      - "logs/{version}/{step}/run.log"
-  - name: routeopt
-    label: "Route Opt"
-    logs:
-      - "logs/{version}/{step}/run.log"
+step_groups:
+  - name: APR
+    label: "APR"
+    steps:
+      - name: init
+        logs:
+          - "logs/{version}/{step}/run.log"
+      - name: floorplan
+        logs:
+          - "logs/{version}/{step}/run.log"
+      - name: place
+        logs:
+          - "logs/{version}/{step}/run.log"
+      - name: cts
+      - name: route
+      - name: routeopt
+    metrics:
+      - key: WNS
+        label: "WNS"
+        format: ".3f"
+        reports:
+          - "reports/{version}/{step}/timing.rpt"
+        step_reports:
+          place:
+            - "reports/{version}/place/place_opt0.rpt"
+            - "reports/{version}/place/place_opt1.rpt"
+      - key: TNS
+        label: "TNS"
+        format: ".3f"
+      - key: max_cap
+        label: "Max Cap"
+        format: ".4f"
+      - key: max_tran
+        label: "Max Tran"
+        format: ".4f"
+      - key: leakage
+        label: "Leakage (mW)"
+        format: ".2f"
+      - key: density
+        label: "Density"
+        format: ".2f"
+        pictures:
+          - "img/{version}/{step}/density.png"
+        step_pictures:
+          place:
+            - "img/{version}/place/density_place.png"
   - name: STA
-    label: "Static Timing"
-    logs:
-      - "logs/{version}/{step}/run.log"
+    label: "STA"
+    steps:
+      - name: setup_scen_0
+        logs:
+          - "logs/{version}/{step}/run.log"
+      - name: setup_scen_1
+        logs:
+          - "logs/{version}/{step}/run.log"
+      - name: hold_scen_0
+      - name: ptpx_scen_0
+    metrics:
+      - key: WNS
+        label: "WNS"
+        format: ".3f"
+        reports:
+          - "reports/{version}/{step}/timing.rpt"
+      - key: TNS
+        label: "TNS"
+        format: ".3f"
+      - key: max_transition
+        label: "Max Transition"
+        format: ".4f"
+      - key: max_capacitance
+        label: "Max Capacitance"
+        format: ".4f"
+      - key: min_pulse_width
+        label: "Min Pulse Width"
+        format: ".4f"
+  - name: PV
+    label: "PV"
+    steps:
+      - drc
+      - ant
+      - lvs
+      - erc
+    metrics:
+      - key: DRC
+        label: "DRC"
+      - key: LVS
+        label: "LVS"
+      - key: ANT
+        label: "ANT"
+      - key: ERC
+        label: "ERC"
+
+steps:
 
 metrics:
-  - key: WNS
-    label: "WNS"
-    format: ".3f"
-    reports:
-      - "reports/{version}/{step}/timing.rpt"
-      - "reports/{version}/{step}/wns_summary.rpt"
-  - key: TNS
-    label: "TNS"
-    format: ".3f"
-  - key: max_cap
-    label: "Max Cap"
-    format: ".4f"
-  - key: max_tran
-    label: "Max Tran"
-    format: ".4f"
-  - key: leakage
-    label: "Leakage (mW)"
-    format: ".2f"
-  - key: density
-    label: "Density"
-    format: ".2f"
-    reports:
-      - "rpt/{version}/{step}/density.rpt"
-    pictures:
-      - "img/{version}/{step}/density.png"
 
 job_columns:
   - key: status

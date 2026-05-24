@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
                              QSizePolicy, QVBoxLayout, QWidget)
 
 from pdf_gui.models.config import FlowConfig
-from pdf_gui.models.run_data import OverallStatus, Version
+from pdf_gui.models.run_data import GroupedVersion, OverallStatus, Version
 
 STATUS_COLOR_MAP = {
     OverallStatus.SUCCESS: "#4CAF50",
@@ -34,13 +34,13 @@ class Sidebar(QWidget):
         self._list.itemClicked.connect(self._on_item_clicked)
         layout.addWidget(self._list)
 
-    def rebuild(self, versions: list[Version]):
+    def rebuild(self, versions: list[GroupedVersion]):
         self._list.clear()
-        for v in versions:
+        for gv in versions:
             item = QListWidgetItem()
-            widget = self._make_item_widget(v)
+            widget = self._make_item_widget(gv)
             item.setSizeHint(widget.sizeHint())
-            item.setData(Qt.UserRole, v.name)
+            item.setData(Qt.UserRole, gv.name)
             self._list.addItem(item)
             self._list.setItemWidget(item, widget)
         self._re_elide_all()
@@ -69,19 +69,19 @@ class Sidebar(QWidget):
                 sub_step_label.setText(fm.elidedText(full_sub, Qt.ElideRight,
                                                      max(available - 60, 30)))
 
-    def _make_item_widget(self, version: Version) -> QWidget:
-        dot_color = STATUS_COLOR_MAP.get(version.status, "#9E9E9E")
+    def _make_item_widget(self, gv: GroupedVersion) -> QWidget:
+        dot_color = STATUS_COLOR_MAP.get(gv.status, "#9E9E9E")
         icon = self._config.icons.SUCCESS
-        if version.status == OverallStatus.FAIL:
+        if gv.status == OverallStatus.FAIL:
             icon = self._config.icons.FAIL
-        elif version.status == OverallStatus.RUNNING:
+        elif gv.status == OverallStatus.RUNNING:
             icon = self._config.icons.RUNNING
-        elif version.status == OverallStatus.PENDING:
+        elif gv.status == OverallStatus.PENDING:
             icon = self._config.icons.PENDING
 
         widget = QWidget()
         widget.setFixedHeight(44)
-        widget.setToolTip(version.name)
+        widget.setToolTip(gv.name)
 
         hlayout = QHBoxLayout(widget)
         hlayout.setContentsMargins(4, 2, 4, 2)
@@ -98,12 +98,12 @@ class Sidebar(QWidget):
         name_label.setObjectName("name_label")
         name_label.setStyleSheet("font-weight: bold;")
         fm = name_label.fontMetrics()
-        name_label.setText(fm.elidedText(version.name, Qt.ElideRight, self.width() - 50))
+        name_label.setText(fm.elidedText(gv.name, Qt.ElideRight, self.width() - 50))
 
         sub_layout = QHBoxLayout()
         sub_layout.setSpacing(4)
 
-        step_text = version.latest_step + " ·" if version.latest_step else ""
+        step_text = gv.latest_step + " ·" if gv.latest_step else ""
         sub_step_label = QLabel()
         sub_step_label.setObjectName("sub_step_label")
         sub_step_label.setStyleSheet("color: #888; font-size: 15px;")
@@ -111,8 +111,8 @@ class Sidebar(QWidget):
         fm_sub = sub_step_label.fontMetrics()
         sub_step_label.setText(fm_sub.elidedText(step_text, Qt.ElideRight, self.width() - 70))
 
-        color = STATUS_COLOR_MAP.get(version.status, "#9E9E9E")
-        sub_status_label = QLabel(version.status.value)
+        color = STATUS_COLOR_MAP.get(gv.status, "#9E9E9E")
+        sub_status_label = QLabel(gv.status.value)
         sub_status_label.setObjectName("sub_status_label")
         sub_status_label.setStyleSheet(f"color: {color}; font-size: 15px; font-weight: bold;")
 

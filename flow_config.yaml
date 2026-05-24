@@ -1,70 +1,84 @@
 # =====================================================================
 # PDF_GUI Configuration File
 # =====================================================================
-# Flow developers: define your flow steps, metrics, and reports here.
-# The GUI reads this file and dynamically builds the dashboard.
+# Flow developers: define step groups, steps, metrics, and reports here.
+# Each group appears as a tab in the GUI with its own steps and metrics.
 # See docs/flow_config_schema.md for full documentation.
 # =====================================================================
 
 flow_name: "Chip Design Flow"
 
-steps:
-  - name: init
-    label: "Initialize"
-    logs:
-      - "logs/{version}/{step}/run.log"
-  - name: floorplan
-    label: "Floorplan"
-    logs:
-      - "logs/{version}/{step}/run.log"
-  - name: place
-    label: "Placement"
-    logs:
-      - "logs/{version}/{step}/run.log"
-  - name: cts
-    label: "Clock Tree"
-    logs:
-      - "logs/{version}/{step}/run.log"
-  - name: route
-    label: "Routing"
-    logs:
-      - "logs/{version}/{step}/run.log"
-  - name: routeopt
-    label: "Route Opt"
-    logs:
-      - "logs/{version}/{step}/run.log"
+step_groups:
+  - name: APR
+    label: "APR"
+    steps:
+      - name: init
+        label: "Initialize"
+        logs:
+          - "logs/{version}/{step}/run.log"
+      - name: floorplan
+        label: "Floorplan"
+        logs:
+          - "logs/{version}/{step}/run.log"
+      - name: place
+        label: "Placement"
+        logs:
+          - "logs/{version}/{step}/run.log"
+      - name: cts
+        label: "Clock Tree"
+        logs:
+          - "logs/{version}/{step}/run.log"
+      - name: route
+        label: "Routing"
+        logs:
+          - "logs/{version}/{step}/run.log"
+      - name: routeopt
+        label: "Route Opt"
+        logs:
+          - "logs/{version}/{step}/run.log"
+    metrics:
+      - key: WNS
+        label: "WNS"
+        format: ".3f"
+        reports:
+          - "reports/{version}/{step}/timing.rpt"
+          - "reports/{version}/{step}/wns_summary.rpt"
+      - key: TNS
+        label: "TNS"
+        format: ".3f"
+      - key: max_cap
+        label: "Max Cap"
+        format: ".4f"
+      - key: max_tran
+        label: "Max Tran"
+        format: ".4f"
+      - key: leakage
+        label: "Leakage (mW)"
+        format: ".2f"
+      - key: density
+        label: "Density"
+        format: ".2f"
+        reports:
+          - "rpt/{version}/{step}/density.rpt"
+        pictures:
+          - "img/{version}/{step}/density.png"
+          - "img/{version}/{step}/density_hist.png"
   - name: STA
-    label: "Static Timing"
-    logs:
-      - "logs/{version}/{step}/run.log"
-
-metrics:
-  - key: WNS
-    label: "WNS"
-    format: ".3f"
-    reports:
-      - "reports/{version}/{step}/timing.rpt"
-      - "reports/{version}/{step}/wns_summary.rpt"
-  - key: TNS
-    label: "TNS"
-    format: ".3f"
-  - key: max_cap
-    label: "Max Cap"
-    format: ".4f"
-  - key: max_tran
-    label: "Max Tran"
-    format: ".4f"
-  - key: leakage
-    label: "Leakage (mW)"
-    format: ".2f"
-  - key: density
-    label: "Density"
-    format: ".2f"
-    reports:
-      - "rpt/{version}/{step}/density.rpt"
-    pictures:
-      - "img/{version}/{step}/density.png"
-      - "img/{version}/{step}/density_hist.png"
+    label: "STA"
+    steps:
+      - name: STA
+        label: "Static Timing"
+        logs:
+          - "logs/{version}/{step}/run.log"
+    metrics:
+      - key: WNS
+        label: "WNS"
+        format: ".3f"
+        reports:
+          - "reports/{version}/{step}/timing.rpt"
+      - key: TNS
+        label: "TNS"
+        format: ".3f"
 
 job_columns:
   - key: status

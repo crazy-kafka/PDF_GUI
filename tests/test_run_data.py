@@ -186,6 +186,76 @@ def test_branched_version():
         assert v.latest_step == "route"
 
 
+def test_step_report_incremental():
+    """Global reports + step_reports are concatenated."""
+    config = FlowConfig(
+        flow_name="Test",
+        steps=[StepConfig(name="init")],
+        metrics=[
+            MetricConfig(key="WNS", reports=["rpt/timing.rpt"],
+                         step_reports={"init": ["rpt/init_extra.rpt"]}),
+        ],
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = os.path.join(tmp, "2026-01-01_1200_chip_A")
+        os.makedirs(run_dir)
+        with open(os.path.join(run_dir, "run_info.json"), "w") as f:
+            json.dump({"version": "chip_A"}, f)
+        with open(os.path.join(run_dir, "init.json"), "w") as f:
+            json.dump({"step": "init", "status": "SUCCESS",
+                        "metrics": {"WNS": -0.050}, "job": {}}, f)
+
+        versions = load_versions([run_dir], config)
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication([])
+
+        table = MetricTable(versions[0], config)
+        mc = config.step_groups[0].metrics[0]
+        step_name = "init"
+        reports = mc.reports + mc.step_reports.get(step_name, [])
+        paths = table._resolve_paths(reports, step_name)
+        assert len(paths) == 2
+        assert paths[0][0] == "rpt/timing.rpt"
+        assert paths[1][0] == "rpt/init_extra.rpt"
+
+
+def test_step_report_no_step_specific():
+    """Step not in step_reports → only global reports."""
+    config = FlowConfig(
+        flow_name="Test",
+        steps=[StepConfig(name="init"), StepConfig(name="place")],
+        metrics=[
+            MetricConfig(key="WNS", reports=["rpt/timing.rpt"],
+                         step_reports={"init": ["rpt/init_extra.rpt"]}),
+        ],
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = os.path.join(tmp, "2026-01-01_1200_chip_A")
+        os.makedirs(run_dir)
+        with open(os.path.join(run_dir, "run_info.json"), "w") as f:
+            json.dump({"version": "chip_A"}, f)
+        with open(os.path.join(run_dir, "init.json"), "w") as f:
+            json.dump({"step": "init", "status": "SUCCESS",
+                        "metrics": {"WNS": -0.050}, "job": {}}, f)
+        with open(os.path.join(run_dir, "place.json"), "w") as f:
+            json.dump({"step": "place", "status": "SUCCESS",
+                        "metrics": {"WNS": -0.100}, "job": {}}, f)
+
+        versions = load_versions([run_dir], config)
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication([])
+
+        table = MetricTable(versions[0], config)
+        mc = config.step_groups[0].metrics[0]
+        # "place" not in step_reports → only global
+        reports = mc.reports + mc.step_reports.get("place", [])
+        paths = table._resolve_paths(reports, "place")
+        assert len(paths) == 1
+        assert paths[0][0] == "rpt/timing.rpt"
+
+
 def test_dotted_metric_key():
     """Metrics with dots in key should read from nested dict."""
     # This tests the current behavior — metrics are read flat from metrics dict
@@ -260,7 +330,7 @@ def test_report_path_resolution():
             app = QApplication([])
 
         table = MetricTable(versions[0], config)
-        mc = config.metrics[0]
+        mc = config.step_groups[0].metrics[0]
         paths = table._resolve_paths(mc.reports, "init")
         assert len(paths) == 2
 
@@ -307,7 +377,7 @@ def test_log_path_resolution():
             app = QApplication([])
 
         table = MetricTable(versions[0], config)
-        paths = table._resolve_paths(config.steps[0].logs, "init")
+        paths = table._resolve_paths(config.step_groups[0].steps[0].logs, "init")
         assert len(paths) == 1
         display, full = paths[0]
         assert display == "logs/{version}/{step}/run.log"
@@ -351,7 +421,7 @@ def test_picture_path_resolution():
 
         table = MetricTable(versions[0], config)
         paths = table._resolve_paths(
-            config.metrics[0].pictures, "init")
+            config.step_groups[0].metrics[0].pictures, "init")
         assert len(paths) == 1
         display, full = paths[0]
         assert display == "img/{version}/{step}/density.png"

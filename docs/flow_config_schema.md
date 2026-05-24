@@ -4,20 +4,25 @@ The YAML config file defines what the PDF_GUI dashboard displays. Flow developer
 write this file once per flow; the GUI reads it and dynamically renders tables,
 metrics, and job status columns.
 
+Config is organized into **step groups** — each group becomes a tab in the GUI
+with its own steps and metrics.
+
 ## Minimal Example
 
 ```yaml
 flow_name: "My Flow"
-steps:
-  - name: synth
-  - name: place
-  - name: route
-metrics:
-  - key: WNS
-  - key: TNS
+step_groups:
+  - name: APR
+    steps:
+      - synth
+      - place
+      - route
+    metrics:
+      - key: WNS
+      - key: TNS
 ```
 
-This produces a table with columns `Step | WNS | TNS` and three rows (synth, place, route).
+This produces one tab "APR" with columns `Step | WNS | TNS` and three rows.
 All other fields use defaults.
 
 ## Full Schema
@@ -27,8 +32,7 @@ All other fields use defaults.
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `flow_name` | string | no | `"PD Flow"` | Displayed in the window title |
-| `steps` | list | yes | — | Flow steps in display order |
-| `metrics` | list | no | `[]` | Metric columns in the table |
+| `step_groups` | list | **yes** | — | Step groups (tabs) |
 | `job_columns` | list | no | `[]` | Job-info columns after metrics |
 | `colors` | map | no | (see below) | Status color overrides |
 | `icons` | map | no | (see below) | Status icon overrides |
@@ -39,25 +43,44 @@ All other fields use defaults.
 | `report_command` | string | no | `""` | Command to open text files (reports, logs) |
 | `picture_command` | string | no | `""` | Command to open picture files |
 
-### `steps`
+### `step_groups`
 
-Each step requires `name` and has optional `label` and `logs`.
+Each group defines a tab with its own steps, metrics, and optional label.
 
 ```yaml
-steps:
-  - name: init            # required — matches {name}.json filename
-    label: "Init"         # optional — display text (default: name.title())
-    logs:                 # optional — Log button in the step row
-      - "logs/{version}/{step}/run.log"
+step_groups:
+  - name: APR              # required — group identifier
+    label: "APR"           # optional — tab label (default: name)
+    steps:                 # required — steps in this group
+      - name: init         #   object form: with logs/label
+        logs:
+          - "logs/{version}/{step}/run.log"
+      - place              #   string form: bare step name
+    metrics:               # optional — metrics for this group
+      - key: WNS
+        label: "WNS"
+        format: ".3f"
+        reports:
+          - "reports/{version}/{step}/timing.rpt"
+        step_reports:
+          place:
+            - "reports/{version}/place/place_opt0.rpt"
 ```
 
-`logs` supports the same template variables as reports (see below).
-If any step config has `logs`, a "Log" column appears in the table.
-Clicking the Log button opens the file (or shows a popup menu if multiple).
+**Steps** can be:
+- A string: `- place` (bare step name)
+- An object: `- name: place; logs: [...]` (with logs and optional label)
 
-### `metrics`
+**Metrics** support the same fields as below (reports, pictures, step_reports, step_pictures).
+Each group's metrics define the columns shown in that group's tab.
 
-Each metric requires `key` and has optional `label`, `format`, `reports`, and `pictures`.
+If any step in any group has `logs`, a "Log" column appears in the table.
+Clicking the Log button opens the file (or shows a popup menu if multiple logs).
+
+### `metrics` (inside each group)
+
+Each metric requires `key` and has optional `label`, `format`, `reports`, `pictures`,
+`step_reports`, and `step_pictures`.
 
 ```yaml
 metrics:
@@ -68,10 +91,20 @@ metrics:
       - "reports/{version}/{step}/timing.rpt"
     pictures:                 # optional — right-click: image files
       - "img/{version}/{step}/density.png"
+    step_reports:             # optional — step-specific additional reports
+      place:
+        - "rpt/{version}/place/place_opt0.rpt"
+    step_pictures:            # optional — step-specific additional pictures
+      place:
+        - "img/{version}/place/extra.png"
 ```
 
 Right-click context menu shows separate "Reports" and "Pictures" sections
 when both are configured. Template variables apply to both.
+
+`step_reports` and `step_pictures` are **added to** the global lists —
+step-specific entries are appended, not replaced. The resolved list is
+`reports + step_reports[step_name]`.
 
 Path templates support:
 

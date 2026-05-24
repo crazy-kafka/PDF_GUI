@@ -16,7 +16,11 @@ def build_dataframe(versions: List[Version], config: FlowConfig) -> pd.DataFrame
         <metric_key>..., job_status, job_runtime, job_memory_current_mb,
         job_cpu_current_pct
     """
-    metric_keys = [m.key for m in config.metrics]
+    metric_keys = []
+    for g in config.step_groups:
+        for m in g.metrics:
+            if m.key not in metric_keys:
+                metric_keys.append(m.key)
     rows = []
 
     for v in versions:

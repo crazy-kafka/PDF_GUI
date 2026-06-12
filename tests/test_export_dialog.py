@@ -131,13 +131,13 @@ def test_format_switches_extension():
         app = QApplication([])
 
     dialog = ExportDialog([], make_config())
-    dialog._path_edit.setText("export.csv")
+    dialog._path_edit.setText("export.xlsx")
 
-    dialog._format_combo.setCurrentIndex(1)  # switch to Excel
-    assert dialog._path_edit.text() == "export.xlsx"
-
-    dialog._format_combo.setCurrentIndex(0)  # back to CSV
+    dialog._format_combo.setCurrentIndex(0)  # switch to CSV
     assert dialog._path_edit.text() == "export.csv"
+
+    dialog._format_combo.setCurrentIndex(1)  # back to Excel
+    assert dialog._path_edit.text() == "export.xlsx"
 
 
 def test_csv_per_group_format():
@@ -251,3 +251,39 @@ def test_xlsx_export():
         # verify merge
         merged = [str(m) for m in ws.merged_cells.ranges]
         assert any("A2" in m for m in merged)
+
+
+def test_csv_grouped_header():
+    """CSV export includes @-prefixed metric key labels in header."""
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication([])
+    from pdf_gui.models.config import StepGroupConfig
+    config = FlowConfig(
+        step_groups=[StepGroupConfig(
+            name="All", steps=["init"],
+            metrics=[
+                MetricConfig(key="density", label="Density"),
+                MetricConfig(key="REG2REG@wns", label="wns"),
+                MetricConfig(key="REG2REG@tns", label="tns"),
+            ],
+        )],
+        job_columns=[JobColumnConfig(key="status")],
+    )
+    versions = [
+        Version(name="v1", dir_path="/tmp/a", status=OverallStatus.SUCCESS,
+                steps=[Step(name="init", status=StepStatus.SUCCESS,
+                            metrics={"density": 56.0, "REG2REG@wns": -0.1,
+                                     "REG2REG@tns": -3.0})],
+                latest_step="init"),
+    ]
+    dialog = ExportDialog(versions, config)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "test.csv")
+        dialog._write_csv(path, versions)
+        with open(path, "r", encoding="utf-8-sig") as f:
+            content = f.read()
+        # grouped header: REG2REG parent label in row0, wns/tns sub-labels in row1
+        assert "REG2REG" in content
+        assert "wns" in content
+        assert "Density" in content

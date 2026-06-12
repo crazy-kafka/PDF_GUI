@@ -23,6 +23,25 @@ ALL_GROUP_STEPS = APR_STEPS + STA_STEPS + PV_STEPS
 METRIC_KEYS = ["WNS", "TNS", "max_cap", "max_tran", "leakage"]
 
 
+def add_apr_metrics(metrics: dict, step_name: str):
+    """Add @-prefixed timing metrics + realistic PD metrics."""
+    # REG2REG timing
+    metrics["REG2REG@wns"] = round(random.uniform(-0.200, -0.005), 3)
+    metrics["REG2REG@tns"] = round(random.uniform(-8.0, -0.5), 2)
+    metrics["REG2REG@nvp"] = random.randint(5, 200)
+    # IO timing
+    metrics["IO@wns"] = round(random.uniform(-0.500, -0.020), 3)
+    metrics["IO@tns"] = round(random.uniform(-25.0, -1.0), 2)
+    metrics["IO@nvp"] = random.randint(2, 80)
+    # Realistic PD metrics
+    metrics["density"] = round(random.uniform(55.0, 95.0), 2)
+    metrics["power"] = round(random.uniform(50.0, 500.0), 2)
+    metrics["ulvt_ratio"] = round(random.uniform(0.10, 0.60), 2)
+    metrics["wire_length"] = round(random.uniform(100.0, 5000.0), 1)
+    metrics["congestion"] = round(random.uniform(0.30, 0.90), 2)
+    return metrics
+
+
 def make_job(status: str, runtime: str) -> dict:
     return {
         "job_id": f"lsf_{random.randint(10000, 99999)}",
@@ -52,7 +71,7 @@ def write_step_json(dir_path: str, step_name: str, status: str, metrics: dict,
     data = {
         "step": step_name,
         "status": status,
-        "metrics": metrics,
+        "metrics": add_apr_metrics(dict(metrics), step_name),
         "job": make_job(job_status, runtime),
     }
     with open(os.path.join(dir_path, f"{step_name}.json"), "w") as f:
@@ -74,7 +93,7 @@ def write_group_step(dir_path: str, step_name: str, status: str,
     data = {
         "step": step_name,
         "status": status,
-        "metrics": metrics,
+        "metrics": add_apr_metrics(dict(metrics), step_name),
         "job": make_job(status, runtime),
     }
     with open(os.path.join(dir_path, f"{step_name}.json"), "w") as f:
@@ -322,71 +341,62 @@ TNS:      -3.450 ns
             if not os.path.isfile(step_json):
                 continue
 
-            # Reports (only for steps that typically have timing reports)
-            if step_name in APR_STEPS + STA_STEPS:
-                report_dir = os.path.join(dir_path, "reports", version_name, step_name)
-                os.makedirs(report_dir, exist_ok=True)
-                with open(os.path.join(report_dir, "timing.rpt"), "w") as f:
-                    f.write(f"# Timing Report — {version_name} / {step_name}\n{sample_rpt}")
-                with open(os.path.join(report_dir, "wns_summary.rpt"), "w") as f:
-                    f.write(f"# WNS Summary — {version_name} / {step_name}\nWNS: -0.050\n")
+            try:
+                # Reports
+                if step_name in APR_STEPS + STA_STEPS:
+                    report_dir = os.path.join(dir_path, "reports", version_name, step_name)
+                    os.makedirs(report_dir, exist_ok=True)
+                    with open(os.path.join(report_dir, "reg2reg_timing.rpt"), "w") as f:
+                        f.write(f"# REG2REG Timing — {version_name} / {step_name}\n{sample_rpt}")
+                    with open(os.path.join(report_dir, "io_timing.rpt"), "w") as f:
+                        f.write(f"# IO Timing — {version_name} / {step_name}\n{sample_rpt}")
 
-            # Density report + picture
-            rpt_dir = os.path.join(dir_path, "rpt", version_name, step_name)
-            os.makedirs(rpt_dir, exist_ok=True)
-            with open(os.path.join(rpt_dir, "density.rpt"), "w") as f:
-                f.write(f"# Density Report — {version_name} / {step_name}\nDensity: 85.2%\n")
+                # Density report + picture
+                rpt_dir = os.path.join(dir_path, "rpt", version_name, step_name)
+                os.makedirs(rpt_dir, exist_ok=True)
+                with open(os.path.join(rpt_dir, "density.rpt"), "w") as f:
+                    f.write(f"# Density Report — {version_name} / {step_name}\nDensity: 85.2%\n")
 
-            img_dir = os.path.join(dir_path, "img", version_name, step_name)
-            os.makedirs(img_dir, exist_ok=True)
-            with open(os.path.join(img_dir, "density.png"), "w") as f:
-                f.write("# placeholder density image\n")
+                img_dir = os.path.join(dir_path, "img", version_name, step_name)
+                os.makedirs(img_dir, exist_ok=True)
+                with open(os.path.join(img_dir, "density.png"), "w") as f:
+                    f.write("# placeholder density image\n")
 
-            # Per-step reports (WNS step_reports)
-            if step_name == "place":
-                place_rpt = os.path.join(dir_path, "reports", version_name,
-                                         "place")
-                os.makedirs(place_rpt, exist_ok=True)
-                for n in range(2):
-                    with open(os.path.join(place_rpt, f"place_opt{n}.rpt"),
-                              "w") as f:
-                        f.write(f"# Place opt{n} — {version_name}\n"
-                                f"WNS: {-0.050 - n * 0.02:.3f}\n")
-            elif step_name == "cts":
-                cts_rpt = os.path.join(dir_path, "reports", version_name, "cts")
-                os.makedirs(cts_rpt, exist_ok=True)
-                with open(os.path.join(cts_rpt, "cts_opt.rpt"), "w") as f:
-                    f.write(f"# CTS opt — {version_name}\n"
-                            f"WNS: -0.030\n")
-            elif step_name == "route":
-                route_rpt = os.path.join(dir_path, "reports", version_name,
-                                         "route")
-                os.makedirs(route_rpt, exist_ok=True)
-                for n in range(3):
-                    with open(os.path.join(route_rpt, f"route_opt{n}.rpt"),
-                              "w") as f:
-                        f.write(f"# Route opt{n} — {version_name}\n"
-                                f"WNS: {-0.020 - n * 0.01:.3f}\n")
+                # Per-step reports + pictures
+                if step_name == "place":
+                    place_rpt = os.path.join(dir_path, "reports", version_name, "place")
+                    os.makedirs(place_rpt, exist_ok=True)
+                    for n in range(2):
+                        with open(os.path.join(place_rpt, f"place_opt{n}.rpt"), "w") as f:
+                            f.write(f"# Place opt{n} — {version_name}\nWNS: {-0.050 - n * 0.02:.3f}\n")
+                elif step_name == "cts":
+                    cts_rpt = os.path.join(dir_path, "reports", version_name, "cts")
+                    os.makedirs(cts_rpt, exist_ok=True)
+                    with open(os.path.join(cts_rpt, "cts_opt.rpt"), "w") as f:
+                        f.write(f"# CTS opt — {version_name}\nWNS: -0.030\n")
+                elif step_name == "route":
+                    route_rpt = os.path.join(dir_path, "reports", version_name, "route")
+                    os.makedirs(route_rpt, exist_ok=True)
+                    for n in range(3):
+                        with open(os.path.join(route_rpt, f"route_opt{n}.rpt"), "w") as f:
+                            f.write(f"# Route opt{n} — {version_name}\nWNS: {-0.020 - n * 0.01:.3f}\n")
 
-            # Per-step pictures (density step_pictures)
-            if step_name == "place":
-                os.makedirs(os.path.join(dir_path, "img", version_name, "place"),
-                            exist_ok=True)
-                with open(os.path.join(dir_path, "img", version_name,
-                                       "place", "density_place.png"), "w") as f:
-                    f.write("# placeholder density_place\n")
-            elif step_name == "cts":
-                os.makedirs(os.path.join(dir_path, "img", version_name, "cts"),
-                            exist_ok=True)
-                with open(os.path.join(dir_path, "img", version_name,
-                                       "cts", "density_cts.png"), "w") as f:
-                    f.write("# placeholder density_cts\n")
+                if step_name == "place":
+                    os.makedirs(os.path.join(dir_path, "img", version_name, "place"), exist_ok=True)
+                    with open(os.path.join(dir_path, "img", version_name, "place", "density_place.png"), "w") as f:
+                        f.write("# placeholder density_place\n")
+                elif step_name == "cts":
+                    os.makedirs(os.path.join(dir_path, "img", version_name, "cts"), exist_ok=True)
+                    with open(os.path.join(dir_path, "img", version_name, "cts", "density_cts.png"), "w") as f:
+                        f.write("# placeholder density_cts\n")
 
-            # Logs
-            log_dir = os.path.join(dir_path, "logs", version_name, step_name)
-            os.makedirs(log_dir, exist_ok=True)
-            with open(os.path.join(log_dir, "run.log"), "w") as f:
-                f.write(sample_log.format(version=version_name, step=step_name))
+                # Logs
+                log_dir = os.path.join(dir_path, "logs", version_name, step_name)
+                os.makedirs(log_dir, exist_ok=True)
+                with open(os.path.join(log_dir, "run.log"), "w") as f:
+                    f.write(sample_log.format(version=version_name, step=step_name))
+            except OSError:
+                continue  # path too long for Windows, skip
 
 
 def _gen_base_30():
@@ -486,8 +496,8 @@ def gen_suite2():
                     json.dump(data, f, indent=2)
                 break
 
-    sample_dirs = [os.path.join(OUTPUT_DIR, d) for d in sorted(os.listdir(OUTPUT_DIR))[:5]]
-    create_sample_reports(sample_dirs)
+    all_version_dirs = [os.path.join(OUTPUT_DIR, d) for d in sorted(os.listdir(OUTPUT_DIR))]
+    create_sample_reports(all_version_dirs)
 
     print(f"Suite 2: {len(os.listdir(OUTPUT_DIR))} versions")
 
@@ -522,8 +532,8 @@ def main():
 
     # Create sample report files for the first 5 versions
     all_dirs = sorted(os.listdir(OUTPUT_DIR))
-    sample_dirs = [os.path.join(OUTPUT_DIR, d) for d in all_dirs[:5]]
-    create_sample_reports(sample_dirs)
+    all_version_dirs = [os.path.join(OUTPUT_DIR, d) for d in sorted(os.listdir(OUTPUT_DIR))]
+    create_sample_reports(all_version_dirs)
 
     print(f"Generated test data in: {OUTPUT_DIR}")
     print(f"Total versions: {len(os.listdir(OUTPUT_DIR))}")

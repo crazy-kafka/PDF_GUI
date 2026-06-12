@@ -4,7 +4,7 @@ import tempfile
 
 from PyQt5.QtWidgets import QApplication
 
-from pdf_gui.models.config import FlowConfig, MetricConfig, StepConfig
+from pdf_gui.models.config import FlowConfig, MetricConfig, StepConfig, StepGroupConfig
 from pdf_gui.models.run_data import (Job, OverallStatus, Step, StepStatus,
                                      Version)
 from pdf_gui.services.data_loader import load_versions
@@ -383,6 +383,66 @@ def test_log_path_resolution():
         assert display == "logs/{version}/{step}/run.log"
         assert os.path.normpath(full) == os.path.normpath(log_path)
         assert os.path.isfile(full)
+
+
+def test_metric_table_detects_groups():
+    """Table with @ metrics detects groups and uses two-row header."""
+    config = FlowConfig(
+        step_groups=[StepGroupConfig(
+            name="All", steps=["init"],
+            metrics=[
+                MetricConfig(key="WNS"),
+                MetricConfig(key="REG2REG@wns", label="wns"),
+                MetricConfig(key="REG2REG@tns", label="tns"),
+            ],
+        )],
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = os.path.join(tmp, "2026-01-01_1200_chip_A")
+        os.makedirs(run_dir)
+        with open(os.path.join(run_dir, "run_info.json"), "w") as f:
+            json.dump({"version": "chip_A"}, f)
+        with open(os.path.join(run_dir, "init.json"), "w") as f:
+            json.dump({"step": "init", "status": "SUCCESS",
+                        "metrics": {"WNS": -0.050, "REG2REG@wns": -0.030,
+                                    "REG2REG@tns": -2.0}, "job": {}}, f)
+        versions = load_versions([run_dir], config)
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication([])
+        table = MetricTable(versions[0], config,
+                            group=config.step_groups[0])
+        assert table._has_grouped_header is True
+        assert "REG2REG" in table._metric_groups
+        # header rows: row 0 = parent, row 1 = sub
+        assert table.item(0, 2).text() == "REG2REG"
+        assert table.item(1, 2).text() == "wns"
+        assert table.item(1, 3).text() == "tns"
+
+
+def test_metric_table_no_groups():
+    """Table without @ metrics uses single-row header."""
+    config = FlowConfig(
+        step_groups=[StepGroupConfig(
+            name="All", steps=["init"],
+            metrics=[MetricConfig(key="WNS"), MetricConfig(key="TNS")],
+        )],
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        run_dir = os.path.join(tmp, "2026-01-01_1200_chip_A")
+        os.makedirs(run_dir)
+        with open(os.path.join(run_dir, "run_info.json"), "w") as f:
+            json.dump({"version": "chip_A"}, f)
+        with open(os.path.join(run_dir, "init.json"), "w") as f:
+            json.dump({"step": "init", "status": "SUCCESS",
+                        "metrics": {"WNS": -0.050}, "job": {}}, f)
+        versions = load_versions([run_dir], config)
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication([])
+        table = MetricTable(versions[0], config,
+                            group=config.step_groups[0])
+        assert table._has_grouped_header is False
 
 
 def test_picture_path_resolution():

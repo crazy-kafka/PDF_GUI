@@ -17,27 +17,32 @@ step_groups:
       - name: route
       - name: routeopt
     metrics:
-      - key: WNS
-        label: "WNS"
+      - key: REG2REG@wns
+        label: "wns"
         format: ".3f"
         reports:
-          - "reports/{version}/{step}/timing.rpt"
+          - "reports/{version}/{step}/reg2reg_timing.rpt"
         step_reports:
           place:
             - "reports/{version}/place/place_opt0.rpt"
             - "reports/{version}/place/place_opt1.rpt"
-      - key: TNS
-        label: "TNS"
+      - key: REG2REG@tns
+        label: "tns"
         format: ".3f"
-      - key: max_cap
-        label: "Max Cap"
-        format: ".4f"
-      - key: max_tran
-        label: "Max Tran"
-        format: ".4f"
-      - key: leakage
-        label: "Leakage (mW)"
-        format: ".2f"
+      - key: REG2REG@nvp
+        label: "nvp"
+        format: ".0f"
+      - key: IO@wns
+        label: "wns"
+        format: ".3f"
+        reports:
+          - "reports/{version}/{step}/io_timing.rpt"
+      - key: IO@tns
+        label: "tns"
+        format: ".3f"
+      - key: IO@nvp
+        label: "nvp"
+        format: ".0f"
       - key: density
         label: "Density"
         format: ".2f"
@@ -46,6 +51,18 @@ step_groups:
         step_pictures:
           place:
             - "img/{version}/place/density_place.png"
+      - key: power
+        label: "Power (mW)"
+        format: ".2f"
+      - key: ulvt_ratio
+        label: "ULVT Ratio"
+        format: ".2f"
+      - key: wire_length
+        label: "Wire Length"
+        format: ".1f"
+      - key: congestion
+        label: "Congestion"
+        format: ".2f"
   - name: STA
     label: "STA"
     steps:

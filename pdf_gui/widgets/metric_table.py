@@ -21,18 +21,38 @@ class MetricTable(QTableWidget):
         self._config = config
         self._group = group
         self._has_logs = any(sc.logs for g in config.step_groups for sc in g.steps)
-
         eff_metrics = group.metrics if group else config.step_groups[0].metrics
+
+        # parse @-grouped metrics
+        self._metric_groups = {}  # prefix → (start_col, sub_labels)
+        col_idx = 1  # col 0 = Step
+        for m in eff_metrics:
+            if "@" in m.key:
+                prefix = m.key.split("@", 1)[0]
+                if prefix not in self._metric_groups:
+                    self._metric_groups[prefix] = (col_idx, [])
+                self._metric_groups[prefix][1].append(m.label)
+            col_idx += 1
+        self._has_grouped_header = bool(self._metric_groups)
+        self._data_row_offset = 2 if self._has_grouped_header else 0
+
         columns = ["Step"] + [m.label for m in eff_metrics] + \
                   [c.label for c in config.job_columns]
         if self._has_logs:
             columns.append("Log")
         self._columns = columns
+        total_cols = len(columns)
+        total_rows = len(gv.steps) + self._data_row_offset
 
-        super().__init__(len(gv.steps), len(columns), parent)
+        super().__init__(total_rows, total_cols, parent)
 
-        self.setHorizontalHeaderLabels(columns)
-        self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        if self._has_grouped_header:
+            self.horizontalHeader().setVisible(False)
+        else:
+            self.setHorizontalHeaderLabels(columns)
+            self.horizontalHeader().setStyleSheet(
+                "QHeaderView::section { background-color: #37474F; "
+                "color: #FFFFFF; font-weight: bold; }")
         self.verticalHeader().setVisible(False)
         self.setContentsMargins(0, 0, 0, 0)
         self.setFrameShape(QFrame.NoFrame)
@@ -43,27 +63,72 @@ class MetricTable(QTableWidget):
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_context_menu)
 
+        if self._has_grouped_header:
+            self._build_grouped_header(eff_metrics)
+
         self._fill_data()
 
-        self.resizeColumnsToContents()
-        for col in range(self.columnCount()):
-            if self.columnWidth(col) < 55:
-                self.setColumnWidth(col, 55)
-        if self.columnCount() > 0:
-            self.setColumnWidth(0, max(self.columnWidth(0), 70))
+        self._apply_column_widths()
+        self._apply_fixed_height()
+
+    def _build_grouped_header(self, eff_metrics):
+        """Render two-row header with parent group labels spanning sub-columns."""
+        hdr_fill = QColor("#37474F")
+        hdr_font_w = QFont()
+        hdr_font_w.setBold(True)
+        # white text via QColor
+        hdr_fg = QColor("#FFFFFF")
+
+        def _hdr_cell(text, row, col):
+            item = QTableWidgetItem(text)
+            item.setBackground(hdr_fill)
+            item.setForeground(hdr_fg)
+            item.setFont(hdr_font_w)
+            item.setTextAlignment(Qt.AlignCenter)
+            self.setItem(row, col, item)
+
+        # Row 0: Step (span 2 rows)
+        _hdr_cell("Step", 0, 0)
+        self.setSpan(0, 0, 2, 1)
+
+        # Row 0: group parent labels
+        for prefix, (start_col, sub_labels) in self._metric_groups.items():
+            n = len(sub_labels)
+            _hdr_cell(prefix, 0, start_col)
+            if n > 1:
+                self.setSpan(0, start_col, 1, n)
+            else:
+                self.setSpan(0, start_col, 2, 1)
+
+        # Row 0: ungrouped metrics (span 2 rows)
+        col = 1
+        for m in eff_metrics:
+            if "@" not in m.key:
+                _hdr_cell(m.label, 0, col)
+                self.setSpan(0, col, 2, 1)
+            col += 1
+
+        # Row 0: job columns + log (span 2 rows)
+        for jc in self._config.job_columns:
+            _hdr_cell(jc.label, 0, col)
+            self.setSpan(0, col, 2, 1)
+            col += 1
         if self._has_logs:
-            log_col = self.columnCount() - 1
-            self.setColumnWidth(log_col, 55)
+            _hdr_cell("Log", 0, col)
+            self.setSpan(0, col, 2, 1)
 
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        height = self.horizontalHeader().height() + 4
-        for i in range(self.rowCount()):
-            height += self.rowHeight(i)
-        self.setFixedHeight(height)
+        # Row 1: sub-labels for grouped metrics
+        for prefix, (start_col, sub_labels) in self._metric_groups.items():
+            for j, sub in enumerate(sub_labels):
+                _hdr_cell(sub, 1, start_col + j)
 
-    def resize_for_font(self):
-        """Recompute column widths and table height after font change."""
+        # Row 1: set items for spanned cells too (to avoid empty items)
+        for col in range(self.columnCount()):
+            if self.item(1, col) is None:
+                self.setItem(1, col, QTableWidgetItem(""))
+
+    def _apply_column_widths(self):
+        self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.resizeColumnsToContents()
         for col in range(self.columnCount()):
             if self.columnWidth(col) < 55:
@@ -72,10 +137,19 @@ class MetricTable(QTableWidget):
             self.setColumnWidth(0, max(self.columnWidth(0), 70))
         if self._has_logs:
             self.setColumnWidth(self.columnCount() - 1, 55)
-        height = self.horizontalHeader().height() + 4
+
+    def _apply_fixed_height(self):
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        height = 4
         for i in range(self.rowCount()):
             height += self.rowHeight(i)
         self.setFixedHeight(height)
+
+    def resize_for_font(self):
+        """Recompute column widths and table height after font change."""
+        self._apply_column_widths()
+        self._apply_fixed_height()
 
     # ── path resolution ────────────────────────────────────────────
 
@@ -146,7 +220,7 @@ class MetricTable(QTableWidget):
         job_start = 1 + metric_count
         log_col = self.columnCount() - 1 if self._has_logs else -1
 
-        for row, step in enumerate(self._gv.steps):
+        for row, step in enumerate(self._gv.steps, start=self._data_row_offset):
             sc = sc_map.get(step.name)
             label = sc.label if sc else step.name
             self.setItem(row, 0, QTableWidgetItem(label))
@@ -223,8 +297,8 @@ class MetricTable(QTableWidget):
         if metric_idx < 0 or metric_idx >= len(eff_metrics):
             return
 
-        row = item.row()
-        if row >= len(self._gv.steps):
+        row = item.row() - self._data_row_offset
+        if row < 0 or row >= len(self._gv.steps):
             return
 
         mc = eff_metrics[metric_idx]

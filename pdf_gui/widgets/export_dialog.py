@@ -52,7 +52,7 @@ class ExportDialog(QDialog):
         # file path
         file_layout = QHBoxLayout()
         file_layout.addWidget(QLabel("File:"))
-        self._path_edit = QLineEdit("export.csv")
+        self._path_edit = QLineEdit("export.xlsx")
         file_layout.addWidget(self._path_edit)
         browse_btn = QPushButton("Browse...")
         browse_btn.clicked.connect(self._browse)
@@ -64,6 +64,7 @@ class ExportDialog(QDialog):
         fmt_layout.addWidget(QLabel("Format:"))
         self._format_combo = QComboBox()
         self._format_combo.addItems(["CSV", "Excel (.xlsx)"])
+        self._format_combo.setCurrentIndex(1)  # XLSX default
         self._format_combo.currentIndexChanged.connect(self._on_format_changed)
         fmt_layout.addWidget(self._format_combo)
         fmt_layout.addStretch()
@@ -174,6 +175,30 @@ class ExportDialog(QDialog):
             rows.append(row)
         return rows
 
+    def _build_column_layout(self, metrics):
+        """Return (row0_labels, row1_labels, has_groups) for grouped header."""
+        seen = set()
+        row0 = ["Step"]
+        row1 = [""]
+        has_groups = False
+        for m in metrics:
+            if "@" in m.key:
+                has_groups = True
+                prefix = m.key.split("@", 1)[0]
+                if prefix not in seen:
+                    row0.append(prefix)
+                    seen.add(prefix)
+                else:
+                    row0.append("")
+                row1.append(m.label)
+            else:
+                row0.append(m.label)
+                row1.append("")
+        for jc in self._config.job_columns:
+            row0.append(jc.label)
+            row1.append("")
+        return row0, row1, has_groups
+
     def _write_csv(self, path: str, versions: List[Version]):
         with open(path, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
@@ -188,9 +213,11 @@ class ExportDialog(QDialog):
                     if not gv_list:
                         continue
                     gv = gv_list[0]
-                    columns = self._build_columns(g)
+                    row0, row1, has_groups = self._build_column_layout(g.metrics)
                     writer.writerow([f"# {g.label or g.name}"])
-                    writer.writerow(columns)
+                    if has_groups:
+                        writer.writerow(row0)
+                    writer.writerow(row1 if has_groups else row0)
                     for row in self._build_rows(gv, g):
                         writer.writerow(row)
                     writer.writerow([])
@@ -224,17 +251,66 @@ class ExportDialog(QDialog):
         if not gv_list:
             return
 
-        columns = ["Version"] + self._build_columns(group_config)
+        row0, row1, has_groups = self._build_column_layout(group_config.metrics)
+        columns = ["Version"] + row0
         col_count = len(columns)
 
-        for ci, col_name in enumerate(columns, 1):
-            cell = ws.cell(row=1, column=ci, value=col_name)
-            cell.fill = HEADER_FILL
-            cell.font = HEADER_FONT
-            cell.border = THIN_BORDER
-            cell.alignment = Alignment(horizontal="center")
-
-        row = 2
+        if has_groups:
+            # Row 1: parent headers
+            for ci, col_name in enumerate(columns, 1):
+                cell = ws.cell(row=1, column=ci, value=col_name)
+                cell.fill = HEADER_FILL
+                cell.font = HEADER_FONT
+                cell.border = THIN_BORDER
+                cell.alignment = Alignment(horizontal="center")
+            # Row 2: sub-labels (row1) + fill empty cells with parent for spanned
+            sub_cols = ["Version"] + row1
+            for ci, col_name in enumerate(sub_cols, 1):
+                val = col_name if col_name else ""
+                cell = ws.cell(row=2, column=ci, value=val)
+                cell.fill = HEADER_FILL
+                cell.font = HEADER_FONT
+                cell.border = THIN_BORDER
+                cell.alignment = Alignment(horizontal="center")
+            # Merge @-group parent labels across sub-columns
+            col = 3  # col 2 = Step, col 3+ = metrics
+            for m in group_config.metrics:
+                if "@" in m.key:
+                    prefix = m.key.split("@", 1)[0]
+                    sc = col
+                    ec = col
+                    # count consecutive same-prefix columns
+                    while ec + 1 <= col_count and row0[ec] == prefix:
+                        ec += 1
+                    if ec > sc:
+                        ws.merge_cells(start_row=1, start_column=sc,
+                                       end_row=1, end_column=ec)
+                col += 1
+            # Merge ungrouped metrics across 2 rows
+            col = 3
+            for m in group_config.metrics:
+                if "@" not in m.key:
+                    ws.merge_cells(start_row=1, start_column=col,
+                                   end_row=2, end_column=col)
+                col += 1
+            # Merge job columns across 2 rows
+            job_start = col
+            for _ in self._config.job_columns:
+                ws.merge_cells(start_row=1, start_column=col,
+                               end_row=2, end_column=col)
+                col += 1
+            # Merge Version + Step columns across 2 rows
+            ws.merge_cells(start_row=1, start_column=1, end_row=2, end_column=1)
+            ws.merge_cells(start_row=1, start_column=2, end_row=2, end_column=2)
+            row = 3
+        else:
+            for ci, col_name in enumerate(columns, 1):
+                cell = ws.cell(row=1, column=ci, value=col_name)
+                cell.fill = HEADER_FILL
+                cell.font = HEADER_FONT
+                cell.border = THIN_BORDER
+                cell.alignment = Alignment(horizontal="center")
+            row = 2
         for gv in gv_list:
             start_row = row
             data_rows = self._build_rows(gv, group_config)

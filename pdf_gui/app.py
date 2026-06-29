@@ -22,6 +22,7 @@ from pdf_gui.widgets.sidebar import Sidebar
 from pdf_gui.widgets.status_bar import StatusBar as SBWrapper
 from pdf_gui.widgets.toolbar import ToolbarWidget
 from pdf_gui.widgets.version_panel import VersionPanel
+from pdf_gui import theme
 
 log = get_logger()
 
@@ -61,8 +62,9 @@ class MainWindow(QMainWindow):
         self.resize(1100, 700)
 
         self._toolbar = ToolbarWidget(
-            default_font=self._config.default_font,
+            default_font=self._config.ui_font,
             default_font_size=self._config.default_font_size,
+            data_font=self._config.data_font,
         )
         self._toolbar.refresh_clicked.connect(self.refresh)
         self._toolbar.font_changed.connect(self._apply_font)
@@ -115,7 +117,9 @@ class MainWindow(QMainWindow):
 
         self._sb_wrapper = SBWrapper(self.statusBar())
 
-        self._apply_font(self._config.default_font, self._config.default_font_size)
+        self._apply_font(self._config.ui_font, self._config.default_font_size)
+
+        theme.apply_theme(QApplication.instance(), self._config)
 
         if self._config.auto_refresh_seconds > 0:
             self._timer = QTimer(self)
@@ -176,6 +180,7 @@ class MainWindow(QMainWindow):
             self._rebuild_single_scroll(versions)
 
         self._sb_wrapper.update(versions, self._sort_config)
+        theme.apply_theme(QApplication.instance(), self._config)
         self.setUpdatesEnabled(True)
 
     def _rebuild_single_scroll(self, versions):
@@ -308,6 +313,8 @@ class MainWindow(QMainWindow):
     def _apply_font(self, family: str, size: int):
         font = QFont(family, size)
         QApplication.setFont(font)
+        # Data font: same size, but keep the configured data font family
+        self._data_font = QFont(self._config.data_font, size)
         if self._config.step_groups:
             for _, _, layout in self._group_scrolls:
                 for i in range(layout.count()):

@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (QAbstractItemView, QAction, QFrame, QHeaderView,
 from pdf_gui.models.config import FlowConfig, StepGroupConfig
 from pdf_gui.models.run_data import GroupedVersion, StepStatus, Version
 from pdf_gui.utils.log import get_logger
+from pdf_gui import theme
 
 log = get_logger()
 
@@ -50,9 +51,6 @@ class MetricTable(QTableWidget):
             self.horizontalHeader().setVisible(False)
         else:
             self.setHorizontalHeaderLabels(columns)
-            self.horizontalHeader().setStyleSheet(
-                "QHeaderView::section { background-color: #37474F; "
-                "color: #FFFFFF; font-weight: bold; }")
         self.verticalHeader().setVisible(False)
         self.setContentsMargins(0, 0, 0, 0)
         self.setFrameShape(QFrame.NoFrame)
@@ -60,6 +58,9 @@ class MetricTable(QTableWidget):
         self.setSelectionBehavior(QAbstractItemView.SelectItems)
         self.setSelectionMode(QAbstractItemView.NoSelection)
         self.setAlternatingRowColors(True)
+        self.setShowGrid(True)
+        self.setGridStyle(Qt.SolidLine)
+        self._data_font = QFont(config.data_font, config.default_font_size)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_context_menu)
 
@@ -73,11 +74,10 @@ class MetricTable(QTableWidget):
 
     def _build_grouped_header(self, eff_metrics):
         """Render two-row header with parent group labels spanning sub-columns."""
-        hdr_fill = QColor("#37474F")
+        hdr_fill = QColor(theme.ThemeColors.bg_header)
         hdr_font_w = QFont()
         hdr_font_w.setBold(True)
-        # white text via QColor
-        hdr_fg = QColor("#FFFFFF")
+        hdr_fg = QColor(theme.ThemeColors.text_primary)
 
         def _hdr_cell(text, row, col):
             item = QTableWidgetItem(text)
@@ -223,30 +223,34 @@ class MetricTable(QTableWidget):
         for row, step in enumerate(self._gv.steps, start=self._data_row_offset):
             sc = sc_map.get(step.name)
             label = sc.label if sc else step.name
-            self.setItem(row, 0, QTableWidgetItem(label))
+            step_item = QTableWidgetItem(label)
+            step_item.setFont(self._data_font)
+            self.setItem(row, 0, step_item)
 
             for col, mc in enumerate(eff_metrics, start=1):
                 val = step.metrics.get(mc.key)
                 if val is None:
-                    self.setItem(row, col, QTableWidgetItem("—"))
+                    item = QTableWidgetItem("—")
                 else:
                     text = format(val, mc.format)
                     item = QTableWidgetItem(text)
                     item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-                    self.setItem(row, col, item)
+                item.setFont(self._data_font)
+                self.setItem(row, col, item)
 
             for col, jc in enumerate(
                     self._config.job_columns, start=job_start):
                 if step.job is None:
-                    self.setItem(row, col, QTableWidgetItem("—"))
+                    item = QTableWidgetItem("—")
                 elif jc.key == "status":
                     icon = icon_map.get(step.status, "?")
                     item = QTableWidgetItem(f"{icon} {step.status.value}")
-                    item.setForeground(color_map.get(step.status, QColor("#000")))
-                    self.setItem(row, col, item)
+                    item.setForeground(color_map.get(step.status, QColor(theme.ThemeColors.text_primary)))
                 else:
                     val = getattr(step.job, jc.key, "")
-                    self.setItem(row, col, QTableWidgetItem(str(val)))
+                    item = QTableWidgetItem(str(val))
+                item.setFont(self._data_font)
+                self.setItem(row, col, item)
 
             if self._has_logs and sc and sc.logs:
                 btn = QPushButton("Log")

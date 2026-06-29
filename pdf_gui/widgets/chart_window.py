@@ -5,11 +5,7 @@ from matplotlib.backends.backend_qt5agg import (FigureCanvasQTAgg,
                                                 NavigationToolbar2QT)
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QWidget
 
-
-STATUS_COLORS = {
-    "SUCCESS": "#4CAF50", "RUNNING": "#2196F3",
-    "FAIL": "#F44336", "PENDING": "#FF9800",
-}
+from pdf_gui import theme
 
 
 class ChartWindow(QMainWindow):
@@ -45,41 +41,62 @@ class ChartWindow(QMainWindow):
         df = cfg["chart_df"]
         y_metric = cfg["y_metric"]
 
-        colors = [STATUS_COLORS.get(s, "#999")
+        # Config-driven status colors
+        status_colors_cfg = cfg.get("status_colors", {})
+        colors = [status_colors_cfg.get(s, theme.ThemeColors.text_secondary)
                   for s in df["version_status"]]
+
+        # Dark matplotlib styling
+        tc = theme.ThemeColors
+        self._fig.patch.set_facecolor(tc.bg_deep)
+        self._ax.set_facecolor(tc.bg_surface)
+        self._ax.tick_params(colors=tc.text_secondary)
+        self._ax.xaxis.label.set_color(tc.text_primary)
+        self._ax.yaxis.label.set_color(tc.text_primary)
+        self._ax.title.set_color(tc.text_primary)
+        for spine in self._ax.spines.values():
+            spine.set_color(tc.border_subtle)
 
         if chart_type == "Line/Bar":
             names = df["version_name"].apply(
                 lambda x: x[:20] + ".." if len(x) > 20 else x)
             self._bars = self._ax.bar(
-                names, df[y_metric], color=colors, edgecolor="white")
+                names, df[y_metric], color=colors,
+                edgecolor=tc.bg_deep)
             self._ax.set_ylabel(y_metric)
             self._ax.set_title(cfg["title"])
             self._fig.autofmt_xdate(rotation=45, ha="right")
+            self._ax.tick_params(axis="x", colors=tc.text_secondary)
 
         elif chart_type == "Scatter":
             x_metric = cfg["x_metric"]
             self._scatter = self._ax.scatter(
                 df[x_metric], df[y_metric], c=colors,
-                alpha=0.7, edgecolors="black")
+                alpha=0.7, edgecolors=tc.bg_deep)
             self._ax.set_xlabel(x_metric)
             self._ax.set_ylabel(y_metric)
             self._ax.set_title(
                 f"{x_metric} vs {y_metric} at {cfg['step_name']}")
 
         elif chart_type == "Histogram":
-            self._ax.hist(df[y_metric], bins="auto", edgecolor="black",
-                          alpha=0.7, color="#607D8B")
+            hist_color = cfg.get("histogram_color", tc.bg_header)
+            mean_color = status_colors_cfg.get("FAIL", "#F44336")
+            median_color = status_colors_cfg.get("RUNNING", "#2196F3")
+            self._ax.hist(df[y_metric], bins="auto",
+                          edgecolor=tc.bg_deep,
+                          alpha=0.7, color=hist_color)
             mean_val = df[y_metric].mean()
             median_val = df[y_metric].median()
-            self._ax.axvline(mean_val, color="#F44336", linestyle="--",
+            self._ax.axvline(mean_val, color=mean_color, linestyle="--",
                              linewidth=2, label=f"Mean: {mean_val:.3f}")
-            self._ax.axvline(median_val, color="#2196F3", linestyle=":",
+            self._ax.axvline(median_val, color=median_color, linestyle=":",
                              linewidth=2, label=f"Median: {median_val:.3f}")
             self._ax.set_xlabel(y_metric)
             self._ax.set_ylabel("Count")
             self._ax.set_title(cfg["title"])
-            self._ax.legend()
+            legend = self._ax.legend()
+            for text in legend.get_texts():
+                text.set_color(tc.text_primary)
 
         self._fig.tight_layout()
 

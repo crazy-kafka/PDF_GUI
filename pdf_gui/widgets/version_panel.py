@@ -5,13 +5,7 @@ from PyQt5.QtWidgets import (QFrame, QHBoxLayout, QLabel, QPushButton,
 from pdf_gui.models.config import FlowConfig, StepGroupConfig
 from pdf_gui.models.run_data import GroupedVersion, OverallStatus, Version
 from pdf_gui.widgets.metric_table import MetricTable
-
-STATUS_COLOR_MAP = {
-    OverallStatus.SUCCESS: "#2E7D32",
-    OverallStatus.RUNNING: "#1565C0",
-    OverallStatus.FAIL: "#C62828",
-    OverallStatus.PENDING: "#E65100",
-}
+from pdf_gui import theme
 
 
 class VersionPanel(QWidget):
@@ -38,7 +32,7 @@ class VersionPanel(QWidget):
         layout.addWidget(self._table)
 
     def _make_header(self) -> QFrame:
-        color = STATUS_COLOR_MAP.get(self._gv.status, "#757575")
+        color = theme.header_color(self._config.colors, self._gv.status)
         frame = QFrame()
         frame.setFrameShape(QFrame.NoFrame)
         frame.setStyleSheet(

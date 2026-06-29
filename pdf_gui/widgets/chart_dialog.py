@@ -8,11 +8,6 @@ from PyQt5.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QHBoxLayout,
 
 from pdf_gui.models.config import FlowConfig
 
-STATUS_COLORS = {
-    "SUCCESS": "#4CAF50", "RUNNING": "#2196F3",
-    "FAIL": "#F44336", "PENDING": "#FF9800",
-}
-
 CHART_TYPES = ["Line/Bar", "Scatter", "Histogram"]
 
 
@@ -201,6 +196,12 @@ class ChartDialog(QDialog):
             "x_metric": x_metric,
             "chart_df": chart_df,
             "title": f"{y_metric} at {step_name}",
+            "status_colors": {
+                "SUCCESS": self._config.colors.SUCCESS,
+                "FAIL": self._config.colors.FAIL,
+                "RUNNING": self._config.colors.RUNNING,
+                "PENDING": self._config.colors.PENDING,
+            },
         }
         self.accept()
 

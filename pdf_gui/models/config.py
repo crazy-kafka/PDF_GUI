@@ -86,6 +86,8 @@ class FlowConfig:
     icons: StatusIcons = field(default_factory=StatusIcons)
     default_font: str = "Consolas"
     default_font_size: int = 10
+    ui_font: str = "system-ui"
+    data_font: str = "Consolas"
     auto_refresh_seconds: int = 0
     refresh_command: str = ""
     report_command: str = ""
@@ -178,6 +180,7 @@ def load_config(path: str) -> FlowConfig:
         PENDING=icons_raw.get("PENDING", "○"),
     )
 
+    default_font = raw.get("default_font", "Consolas")
     return FlowConfig(
         flow_name=flow_name,
         steps=steps,
@@ -185,8 +188,10 @@ def load_config(path: str) -> FlowConfig:
         job_columns=job_columns,
         colors=colors,
         icons=icons,
-        default_font=raw.get("default_font", "Consolas"),
+        default_font=default_font,
         default_font_size=raw.get("default_font_size", 10),
+        ui_font=raw.get("ui_font", default_font),
+        data_font=raw.get("data_font", default_font),
         auto_refresh_seconds=raw.get("auto_refresh_seconds", 0),
         refresh_command=raw.get("refresh_command", ""),
         report_command=raw.get("report_command", ""),

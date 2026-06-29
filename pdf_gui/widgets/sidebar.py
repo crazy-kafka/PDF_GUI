@@ -4,13 +4,7 @@ from PyQt5.QtWidgets import (QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
 
 from pdf_gui.models.config import FlowConfig
 from pdf_gui.models.run_data import GroupedVersion, OverallStatus, Version
-
-STATUS_COLOR_MAP = {
-    OverallStatus.SUCCESS: "#4CAF50",
-    OverallStatus.RUNNING: "#2196F3",
-    OverallStatus.FAIL: "#F44336",
-    OverallStatus.PENDING: "#FF9800",
-}
+from pdf_gui import theme
 
 
 class Sidebar(QWidget):
@@ -25,7 +19,12 @@ class Sidebar(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
 
         header = QLabel("VERSIONS")
-        header.setStyleSheet("font-weight: bold; font-size: 11px;")
+        header.setObjectName("sidebar_header")
+        header.setStyleSheet(
+            f"font-weight: bold; font-size: 11px; "
+            f"color: {theme.ThemeColors.text_secondary}; "
+            f"padding: 2px 4px;"
+        )
         layout.addWidget(header)
 
         self._list = QListWidget()
@@ -70,7 +69,7 @@ class Sidebar(QWidget):
                                                      max(available - 60, 30)))
 
     def _make_item_widget(self, gv: GroupedVersion) -> QWidget:
-        dot_color = STATUS_COLOR_MAP.get(gv.status, "#9E9E9E")
+        dot_color = theme.status_color(self._config.colors, gv.status)
         icon = self._config.icons.SUCCESS
         if gv.status == OverallStatus.FAIL:
             icon = self._config.icons.FAIL
@@ -82,13 +81,17 @@ class Sidebar(QWidget):
         widget = QWidget()
         widget.setFixedHeight(44)
         widget.setToolTip(gv.name)
+        # Signature scan-line: 3px left border in status color
+        widget.setStyleSheet(
+            f"border-left: 3px solid {dot_color};"
+        )
 
         hlayout = QHBoxLayout(widget)
         hlayout.setContentsMargins(4, 2, 4, 2)
         hlayout.setSpacing(4)
 
-        dot = QLabel(f'<span style="color:{dot_color}; font-size:20px;">●</span> {icon}')
-        dot.setFixedWidth(40)
+        dot = QLabel(f'<span style="color:{dot_color};">●</span> {icon}')
+        dot.setFixedWidth(30)
         hlayout.addWidget(dot)
 
         text_layout = QVBoxLayout()
@@ -106,15 +109,17 @@ class Sidebar(QWidget):
         step_text = gv.latest_step + " ·" if gv.latest_step else ""
         sub_step_label = QLabel()
         sub_step_label.setObjectName("sub_step_label")
-        sub_step_label.setStyleSheet("color: #888; font-size: 15px;")
+        # Use theme text_secondary for step info
+        sub_step_label.setStyleSheet(
+            f"color: {theme.ThemeColors.text_secondary}; font-size: 11px;")
         sub_step_label.setToolTip(step_text)
         fm_sub = sub_step_label.fontMetrics()
         sub_step_label.setText(fm_sub.elidedText(step_text, Qt.ElideRight, self.width() - 70))
 
-        color = STATUS_COLOR_MAP.get(gv.status, "#9E9E9E")
         sub_status_label = QLabel(gv.status.value)
         sub_status_label.setObjectName("sub_status_label")
-        sub_status_label.setStyleSheet(f"color: {color}; font-size: 15px; font-weight: bold;")
+        sub_status_label.setStyleSheet(
+            f"color: {dot_color}; font-size: 11px; font-weight: bold;")
 
         sub_layout.addWidget(sub_step_label)
         sub_layout.addWidget(sub_status_label)

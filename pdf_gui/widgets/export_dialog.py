@@ -236,7 +236,7 @@ class ExportDialog(QDialog):
             "PENDING": PatternFill(start_color="FFE0B2", end_color="FFE0B2",
                                    fill_type="solid"),
         }
-        HEADER_FILL = PatternFill(start_color="37474F", end_color="37474F",
+        HEADER_FILL = PatternFill(start_color="21262D", end_color="21262D",
                                   fill_type="solid")
         HEADER_FONT = Font(bold=True, color="FFFFFF")
         THIN_BORDER = Border(

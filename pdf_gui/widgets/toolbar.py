@@ -13,9 +13,11 @@ class ToolbarWidget(QToolBar):
     chart_clicked = pyqtSignal()
 
     def __init__(self, default_font: str = "Consolas",
-                 default_font_size: int = 10, parent=None):
+                 default_font_size: int = 10,
+                 data_font: str = "Consolas", parent=None):
         super().__init__("Toolbar", parent)
         self.setMovable(False)
+        self.setObjectName("main_toolbar")
 
         refresh_action = QAction("Refresh", self)
         refresh_action.triggered.connect(self.refresh_clicked.emit)

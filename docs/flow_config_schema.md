@@ -106,6 +106,42 @@ when both are configured. Template variables apply to both.
 step-specific entries are appended, not replaced. The resolved list is
 `reports + step_reports[step_name]`.
 
+#### Multi-level headers (`@` metric key grouping)
+
+When a metric `key` contains `@` (e.g., `REG2REG@wns`), the portion before `@`
+becomes a **parent group label** spanning its sub-columns in a two-row table header.
+
+```yaml
+metrics:
+  - key: REG2REG@wns         # "REG2REG" parent spans wns / tns / nvp
+    label: "wns"
+  - key: REG2REG@tns
+    label: "tns"
+  - key: REG2REG@nvp
+    label: "nvp"
+  - key: IO@wns               # "IO" parent spans wns / tns
+    label: "wns"
+  - key: IO@tns
+    label: "tns"
+  - key: density              # no @ — ungrouped, spans both header rows
+    label: "Density"
+```
+
+This renders a two-row table header:
+
+```
+┌────────┬────── REG2REG ──────┬───────── IO ────────┬──────────┬───┐
+│  Step  │  wns │  tns │  nvp  │  wns    │  tns     │ Density  │ … │
+├────────┼──────┼──────┼───────┼─────────┼──────────┼──────────┼───┤
+```
+
+- **Row 0**: parent labels (`REG2REG`, `IO`) span their sub-columns via `setSpan`;
+  ungrouped metrics span both rows.
+- **Row 1**: sub-labels (`wns`, `tns`, `nvp`) for grouped metrics; empty for ungrouped.
+- Consecutive metrics sharing the same `@` prefix are merged into one group.
+- The same grouped header structure is preserved in CSV and Excel exports.
+- A metric without `@` behaves normally — its label occupies both header rows.
+
 Path templates support:
 
 | Variable | Expands to |

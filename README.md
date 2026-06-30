@@ -81,6 +81,38 @@ job_columns:
 
 Each group appears as a tab in the GUI. Steps can be bare strings (`- place`) or objects with `name`/`logs`.
 Report/log/picture paths support `{version}`, `{step}`, and `{run_dir}` template variables.
+
+### Multi-level headers (`@` metric key grouping)
+
+Metric keys with `@` produce grouped two-row table headers — the prefix (before `@`) becomes a parent label spanning its sub-columns:
+
+```yaml
+metrics:
+  - key: REG2REG@wns       # "REG2REG" spans wns / tns / nvp
+    label: "wns"
+  - key: REG2REG@tns
+    label: "tns"
+  - key: REG2REG@nvp
+    label: "nvp"
+  - key: IO@wns             # "IO" spans wns / tns
+    label: "wns"
+  - key: IO@tns
+    label: "tns"
+  - key: density            # ungrouped — spans both rows
+    label: "Density"
+```
+
+Renders as:
+
+```
+┌────────┬───── REG2REG ─────┬─────── IO ───────┬──────────┬───┐
+│  Step  │ wns │ tns │ nvp   │ wns    │ tns     │ Density  │ … │
+├────────┼─────┼─────┼───────┼────────┼─────────┼──────────┼───┤
+│  init  │ …   │ …   │ …     │ …      │ …       │ …        │ … │
+```
+
+Same grouped header structure is preserved in CSV and Excel exports.
+
 See [docs/flow_config_schema.md](docs/flow_config_schema.md) for the full schema reference.
 
 ## Run Data Format

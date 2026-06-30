@@ -79,7 +79,7 @@ class Sidebar(QWidget):
             icon = self._config.icons.PENDING
 
         widget = QWidget()
-        widget.setFixedHeight(44)
+        widget.setFixedHeight(34)
         widget.setToolTip(gv.name)
         # Signature scan-line: 3px left border in status color
         widget.setStyleSheet(

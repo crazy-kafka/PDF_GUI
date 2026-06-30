@@ -129,7 +129,19 @@ class MetricTable(QTableWidget):
 
     def _apply_column_widths(self):
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        # Temporarily clear group parent labels so resizeColumnsToContents()
+        # sizes columns by sub-label + data width, not by long parent names
+        saved = {}
+        if self._has_grouped_header:
+            for prefix, (start_col, _) in self._metric_groups.items():
+                item = self.item(0, start_col)
+                if item:
+                    saved[start_col] = item.text()
+                    item.setText("")
         self.resizeColumnsToContents()
+        # Restore group parent labels
+        for col, text in saved.items():
+            self.item(0, col).setText(text)
         for col in range(self.columnCount()):
             if self.columnWidth(col) < 55:
                 self.setColumnWidth(col, 55)
@@ -141,9 +153,12 @@ class MetricTable(QTableWidget):
     def _apply_fixed_height(self):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        height = 4
+        height = 0
+        if not self._has_grouped_header:
+            height += self.horizontalHeader().height()
         for i in range(self.rowCount()):
             height += self.rowHeight(i)
+        height += 4  # frame border allowance
         self.setFixedHeight(height)
 
     def resize_for_font(self):

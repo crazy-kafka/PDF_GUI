@@ -13,9 +13,20 @@ step_groups:
       - name: place
         logs:
           - "logs/{version}/{step}/run.log"
+        databases:
+          - label: "ICC2 Layout"
+            command: "python tests/test_data/db_launcher.py --no-gui --label {label} --version {version} --step {step}"
+          - label: "Verdi Debug"
+            command: "python tests/test_data/db_launcher.py --no-gui --label {label} --version {version} --step {step}"
       - name: cts
       - name: route
+        databases:
+          - label: "Route DB"
+            # uses global database_command fallback
       - name: routeopt
+        databases:
+          - label: "RouteOpt DB"
+            command: "python tests/test_data/db_launcher.py --no-gui --label {label} --version {version} --step {step}"
     metrics:
       - key: REG2REG@wns
         label: "wns"
@@ -118,3 +129,5 @@ job_columns:
     label: "Job Status"
   - key: runtime
     label: "Wall Time"
+
+database_command: "python tests/test_data/db_launcher.py --no-gui --label {label} --version {version} --step {step}"

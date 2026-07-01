@@ -42,6 +42,7 @@ All other fields use defaults.
 | `refresh_command` | string | no | `""` | Script run before refresh. Priority: CLI `-r` > Settings dialog > this YAML value |
 | `report_command` | string | no | `""` | Command to open text files (reports, logs) |
 | `picture_command` | string | no | `""` | Command to open picture files |
+| `database_command` | string | no | `""` | Global fallback command for DB buttons. Supports `{label}`, `{version}`, `{step}`, `{run_dir}`. Priority: Settings dialog > this YAML value |
 
 ### `step_groups`
 
@@ -52,10 +53,16 @@ step_groups:
   - name: APR              # required — group identifier
     label: "APR"           # optional — tab label (default: name)
     steps:                 # required — steps in this group
-      - name: init         #   object form: with logs/label
+      - name: init         #   object form: with logs/label/databases
         logs:
           - "logs/{version}/{step}/run.log"
-      - place              #   string form: bare step name
+      - name: place
+        databases:          #   per-step EDA database shortcuts
+          - label: "ICC2 Layout"
+            command: "icc2_dbm_open -design {version}_place"
+          - label: "Verdi Debug"
+            command: "verdi -dbdir {run_dir}/{step}/verdi_db"
+      - cts                #   string form: bare step name
     metrics:               # optional — metrics for this group
       - key: WNS
         label: "WNS"
@@ -69,13 +76,50 @@ step_groups:
 
 **Steps** can be:
 - A string: `- place` (bare step name)
-- An object: `- name: place; logs: [...]` (with logs and optional label)
+- An object: `- name: place; logs: [...]; databases: [...]` (with logs, databases, and optional label)
 
 **Metrics** support the same fields as below (reports, pictures, step_reports, step_pictures).
 Each group's metrics define the columns shown in that group's tab.
 
 If any step in any group has `logs`, a "Log" column appears in the table.
 Clicking the Log button opens the file (or shows a popup menu if multiple logs).
+
+#### Database button (`databases` on steps)
+
+Each step can have `databases` — shortcuts to launch EDA tool database viewers.
+If any step in any group has `databases`, a **"DB" column** appears in the table.
+
+```yaml
+steps:
+  - name: place
+    databases:
+      - label: "ICC2 Layout"            # required — display name
+        command: "icc2_dbm_open -design {version}_place"  # optional launch template
+      - label: "Verdi Debug"
+        command: "verdi -dbdir {run_dir}/{step}/verdi_db"
+      - label: "StarRC"
+        # no command — uses global database_command fallback
+```
+
+Template variables for `command`:
+
+| Variable | Expands to |
+|----------|------------|
+| `{version}` | Version name |
+| `{step}` | Step name |
+| `{run_dir}` | Full path to run directory |
+| `{label}` | Database label (e.g., "ICC2 Layout") |
+
+**Command resolution priority:**
+1. Per-database `command` field
+2. Global `database_command` from config
+3. QSettings `database_command` from Settings dialog
+4. If none configured: does nothing (no crash)
+
+**Behavior:**
+- Single database on a step → click launches directly via `subprocess.Popen`
+- Multiple databases → popup `QMenu` with labels; click an item to launch
+- No databases on a step → empty cell (no button)
 
 ### `metrics` (inside each group)
 

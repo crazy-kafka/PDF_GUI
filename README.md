@@ -43,6 +43,16 @@ step_groups:
         logs:
           - "logs/{version}/{step}/run.log"
       - name: place
+        databases:
+          - label: "ICC2 Layout"
+            command: "icc2_dbm_open -design {version}_place"
+      - name: cts
+        databases:
+          - label: "CTS DB"
+      - name: route
+        databases:
+          - label: "Route DB"
+            command: "route_viewer {run_dir}/{step}"
     metrics:
       - key: WNS
         label: "WNS"
@@ -77,6 +87,7 @@ job_columns:
 # refresh_command: "./pull_data.sh"
 # report_command: "gvim {file}"
 # picture_command: "eog {file}"
+# database_command: "eda_open {label} {version} {step}"
 ```
 
 Each group appears as a tab in the GUI. Steps can be bare strings (`- place`) or objects with `name`/`logs`.
@@ -157,9 +168,9 @@ runs/
 │ VERSIONS        │ ┌─ APR ────┬─ STA ────┬─ PV ──────────────────┐│
 │                 │ │ ─────────────────────────────────────────── ││
 │ ● golden        │ │ ┌─ [−] Version: chip_A ─ ✓ SUCCESS ───────┐││
-│   SUCCESS       │ │ │ Step   │ WNS    │ TNS   │ Status │ Log  │││
-│ ● eco_v2        │ │ │ init   │ -0.095 │ -3.45 │ ✓ pass │ [Log]│││
-│   RUNNING       │ │ │ place  │ —      │ —     │ ✓ pass │ [Log]│││
+│   SUCCESS       │ │ │ Step   │ WNS    │ TNS   │ Status │Log│DB│││
+│ ● eco_v2        │ │ │ init   │ -0.095 │ -3.45 │ ✓ pass │[L]│  │││
+│   RUNNING       │ │ │ place  │ —      │ —     │ ✓ pass │[L]│[D]│││
 │                 │ │ └──────────────────────────────────────────┘││
 │ ● exp.          │ │ ┌─ [−] Version: chip_B ─ ⟳ RUNNING ───────┐││
 │   FAIL          │ │ │ ...                                      │││
@@ -174,6 +185,7 @@ runs/
 - **Right panel**: Tab widget with one tab per step group. Each tab shows version panels with only that group's steps and metrics. Foldable with `[−]`/`[+]` buttons.
 - **Right-click** metric cells to open reports and pictures (separate sections in menu). Global + per-step report/picture paths. Configurable via `report_command`/`picture_command` in Settings.
 - **Log button** per step row — opens step-specific log files (configured via `logs` on group steps).
+- **DB button** per step row — launches EDA tool database viewers via configurable shell commands (configured via `databases` on group steps). Single database launches directly; multiple databases show a popup menu. Supports `{version}`, `{step}`, `{run_dir}`, `{label}` template variables.
 - **Toolbar**: Refresh, Settings, Export (CSV/Excel per-group sheets), Sort (date or metric with group filter), Chart (cross-version Bar/Scatter/Histogram).
 
 ## CLI
@@ -203,15 +215,16 @@ pdf_gui/
 │   └── log.py              # Centralized logging (INFO/WARNING/ERROR)
 ├── widgets/
 │   ├── toolbar.py          # Refresh, Settings, Export, Sort, Chart, font
-│   ├── metric_table.py     # Dynamic columns, reports/pictures, Log btn
+│   ├── metric_table.py     # Dynamic columns, reports/pictures, Log/DB btn
 │   ├── version_panel.py    # Foldable colored header + table
 │   ├── sidebar.py          # Resizable list, dynamic name eliding
-│   ├── settings_dialog.py  # Refresh script, text/picture commands
+│   ├── settings_dialog.py  # Refresh script, text/picture/DB commands
 │   ├── export_dialog.py    # CSV/Excel export with version selection
 │   ├── sort_dialog.py      # Sort by date or metric value
 │   ├── chart_dialog.py     # Chart config: type, step, metrics, versions
 │   ├── chart_window.py     # Matplotlib chart window with hover
 │   └── status_bar.py       # Run count + latest version
+├── theme.py              # Silicon Terminal dark theme (colors, QSS, fonts)
 ├── app.py                # MainWindow
 └── main.py              # Entry point (+ -r flag)
 ```
@@ -254,6 +267,22 @@ Click **Chart** in the toolbar to visualize metrics across versions. Select char
 | Histogram | Distribution of one metric across versions with mean/median lines. |
 
 DataModel: versions are converted to a pandas DataFrame (`pdf_gui/services/dataframe_builder.py`) once per refresh — used as the data source for all charts. Requires `matplotlib`, `pandas`.
+
+### Database button (EDA tool launcher)
+
+Click **DB** in any step row to launch the EDA tool database viewer for that version+step. Configured via `databases` on steps in the YAML config. Each database entry has a `label` (display name) and optional `command` (launch template). Template variables `{version}`, `{step}`, `{run_dir}`, and `{label}` are substituted at runtime.
+
+Single database → launches directly. Multiple databases → popup menu. If a database entry has no `command`, the global `database_command` is used as fallback. The Settings dialog provides a QSettings override.
+
+```yaml
+steps:
+  - name: place
+    databases:
+      - label: "ICC2 Layout"
+        command: "icc2_dbm_open -design {version}_place"
+      - label: "Verdi Debug"
+        command: "verdi -dbdir {run_dir}/{step}/verdi_db"
+```
 
 ### Logging
 

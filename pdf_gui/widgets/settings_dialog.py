@@ -8,6 +8,7 @@ SETTINGS_APP = "settings"
 KEY_REFRESH_COMMAND = "refresh_command"
 KEY_REPORT_COMMAND = "report_command"
 KEY_PICTURE_COMMAND = "picture_command"
+KEY_DATABASE_COMMAND = "database_command"
 
 
 class SettingsDialog(QDialog):
@@ -54,6 +55,16 @@ class SettingsDialog(QDialog):
 
         layout.addLayout(pic_layout)
 
+        layout.addWidget(QLabel("Database command:"))
+
+        db_layout = QHBoxLayout()
+        self._db_edit = QLineEdit()
+        self._db_edit.setText(self._settings.value(KEY_DATABASE_COMMAND, ""))
+        self._db_edit.setPlaceholderText("eda_launcher {label} {version} {step}")
+        db_layout.addWidget(self._db_edit)
+
+        layout.addLayout(db_layout)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._save_and_accept)
         buttons.rejected.connect(self.reject)
@@ -70,4 +81,5 @@ class SettingsDialog(QDialog):
         self._settings.setValue(KEY_REFRESH_COMMAND, self._cmd_edit.text().strip())
         self._settings.setValue(KEY_REPORT_COMMAND, self._rpt_edit.text().strip())
         self._settings.setValue(KEY_PICTURE_COMMAND, self._pic_edit.text().strip())
+        self._settings.setValue(KEY_DATABASE_COMMAND, self._db_edit.text().strip())
         self.accept()

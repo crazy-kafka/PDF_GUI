@@ -201,6 +201,93 @@ step_groups:
         os.unlink(path)
 
 
+def test_database_config_parsing():
+    """databases on steps parsed into DatabaseConfig list."""
+    yaml_content = """
+flow_name: "Test"
+step_groups:
+  - name: APR
+    steps:
+      - name: place
+        databases:
+          - label: "ICC2 Layout"
+            command: "icc2_open -db {version}/{step}"
+          - label: "Verdi Debug"
+            command: "verdi -db {run_dir}/{step}"
+      - name: cts
+    metrics:
+      - key: WNS
+database_command: "default_db_open {label}"
+"""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        f.write(yaml_content)
+        path = f.name
+
+    try:
+        config = load_config(path)
+        g = config.step_groups[0]
+        place_step = [s for s in g.steps if s.name == "place"][0]
+        cts_step = [s for s in g.steps if s.name == "cts"][0]
+        assert len(place_step.databases) == 2
+        assert place_step.databases[0].label == "ICC2 Layout"
+        assert place_step.databases[0].command == "icc2_open -db {version}/{step}"
+        assert place_step.databases[1].label == "Verdi Debug"
+        assert place_step.databases[1].command == "verdi -db {run_dir}/{step}"
+        assert cts_step.databases == []
+        assert config.database_command == "default_db_open {label}"
+    finally:
+        os.unlink(path)
+
+
+def test_database_config_defaults():
+    """Step without databases gets empty list; DB without command gets ''."""
+    yaml_content = """
+flow_name: "Test"
+step_groups:
+  - name: APR
+    steps:
+      - name: init
+    metrics:
+      - key: WNS
+"""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        f.write(yaml_content)
+        path = f.name
+
+    try:
+        config = load_config(path)
+        step = config.step_groups[0].steps[0]
+        assert step.databases == []
+        assert config.database_command == ""
+    finally:
+        os.unlink(path)
+
+
+def test_database_config_backward_compat():
+    """Config without databases key loads without error."""
+    yaml_content = """
+flow_name: "Test"
+step_groups:
+  - name: All
+    steps:
+      - init
+      - place
+    metrics:
+      - key: WNS
+"""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+        f.write(yaml_content)
+        path = f.name
+
+    try:
+        config = load_config(path)
+        g = config.step_groups[0]
+        for s in g.steps:
+            assert s.databases == []
+    finally:
+        os.unlink(path)
+
+
 def test_job_column_default_label():
     """Job column labels should default to key.title() replacing _ with space."""
     yaml_content = """

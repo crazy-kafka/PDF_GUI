@@ -36,10 +36,27 @@ class JobColumnConfig:
 
 
 @dataclass
+class DatabaseConfig:
+    """A database that can be opened from the GUI for a step.
+
+    Each entry represents one EDA tool database associated with a step.
+    The ``command`` template supports {version}, {step}, {run_dir}, {label}
+    placeholder substitution.
+    """
+    label: str
+    command: str = ""
+
+    def __post_init__(self):
+        if not self.label:
+            self.label = "DB"
+
+
+@dataclass
 class StepConfig:
     name: str
     label: str = ""
     logs: List[str] = field(default_factory=list)
+    databases: List[DatabaseConfig] = field(default_factory=list)
 
     def __post_init__(self):
         if not self.label:
@@ -92,6 +109,7 @@ class FlowConfig:
     refresh_command: str = ""
     report_command: str = ""
     picture_command: str = ""
+    database_command: str = ""
     step_groups: List[StepGroupConfig] = field(default_factory=list)
 
     def __post_init__(self):
@@ -144,9 +162,16 @@ def load_config(path: str) -> FlowConfig:
                 if isinstance(gs, str):
                     group_step_configs.append(StepConfig(name=gs))
                 else:
+                    db_list = []
+                    for db in gs.get("databases", []):
+                        db_list.append(DatabaseConfig(
+                            label=db.get("label", db.get("command", "DB")),
+                            command=db.get("command", ""),
+                        ))
                     group_step_configs.append(StepConfig(
                         name=gs["name"], label=gs.get("label", ""),
                         logs=gs.get("logs", []),
+                        databases=db_list,
                     ))
             step_groups.append(StepGroupConfig(
                 name=g["name"], label=g.get("label", ""),
@@ -196,6 +221,7 @@ def load_config(path: str) -> FlowConfig:
         refresh_command=raw.get("refresh_command", ""),
         report_command=raw.get("report_command", ""),
         picture_command=raw.get("picture_command", ""),
+        database_command=raw.get("database_command", ""),
         step_groups=step_groups,
     )
 

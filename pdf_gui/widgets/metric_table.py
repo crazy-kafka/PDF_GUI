@@ -22,6 +22,7 @@ class MetricTable(QTableWidget):
         self._config = config
         self._group = group
         self._has_logs = any(sc.logs for g in config.step_groups for sc in g.steps)
+        self._has_databases = any(sc.databases for g in config.step_groups for sc in g.steps)
         eff_metrics = group.metrics if group else config.step_groups[0].metrics
 
         # parse @-grouped metrics
@@ -41,6 +42,8 @@ class MetricTable(QTableWidget):
                   [c.label for c in config.job_columns]
         if self._has_logs:
             columns.append("Log")
+        if self._has_databases:
+            columns.append("DB")
         self._columns = columns
         total_cols = len(columns)
         total_rows = len(gv.steps) + self._data_row_offset
@@ -116,6 +119,11 @@ class MetricTable(QTableWidget):
         if self._has_logs:
             _hdr_cell("Log", 0, col)
             self.setSpan(0, col, 2, 1)
+            col += 1
+        if self._has_databases:
+            _hdr_cell("DB", 0, col)
+            self.setSpan(0, col, 2, 1)
+            col += 1
 
         # Row 1: sub-labels for grouped metrics
         for prefix, (start_col, sub_labels) in self._metric_groups.items():
@@ -148,7 +156,9 @@ class MetricTable(QTableWidget):
         if self.columnCount() > 0:
             self.setColumnWidth(0, max(self.columnWidth(0), 70))
         if self._has_logs:
-            self.setColumnWidth(self.columnCount() - 1, 55)
+            self.setColumnWidth(self.columnCount() - (1 if self._has_databases else 0) - 1, 55)
+        if self._has_databases:
+            self.setColumnWidth(self.columnCount() - 1, 45)
 
     def _apply_fixed_height(self):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -233,7 +243,8 @@ class MetricTable(QTableWidget):
         eff_metrics = self._group.metrics if self._group else self._config.step_groups[0].metrics
         metric_count = len(eff_metrics)
         job_start = 1 + metric_count
-        log_col = self.columnCount() - 1 if self._has_logs else -1
+        log_col = self.columnCount() - (1 if self._has_databases else 0) - 1 if self._has_logs else -1
+        db_col = self.columnCount() - 1 if self._has_databases else -1
 
         for row, step in enumerate(self._gv.steps, start=self._data_row_offset):
             sc = sc_map.get(step.name)
@@ -274,10 +285,17 @@ class MetricTable(QTableWidget):
                     lambda checked, r=row: self._on_log_clicked(r))
                 self.setCellWidget(row, log_col, btn)
 
+            if self._has_databases and sc and sc.databases:
+                btn = QPushButton("DB")
+                btn.setFixedHeight(40)
+                btn.clicked.connect(
+                    lambda checked, r=row: self._on_db_clicked(r))
+                self.setCellWidget(row, db_col, btn)
+
     # ── log button ──────────────────────────────────────────────────
 
     def _on_log_clicked(self, row: int):
-        step = self._gv.steps[row]
+        step = self._gv.steps[row - self._data_row_offset]
         sc_map = {}
         for g in self._config.step_groups:
             for sc in g.steps:
@@ -303,6 +321,81 @@ class MetricTable(QTableWidget):
             action = menu.exec_(pos)
             if action:
                 self._open_file(action.data())
+
+    # ── database button ──────────────────────────────────────────────
+
+    def _on_db_clicked(self, row: int):
+        step_idx = row - self._data_row_offset
+        if step_idx < 0 or step_idx >= len(self._gv.steps):
+            return
+        step = self._gv.steps[step_idx]
+        sc_map = {}
+        for g in self._config.step_groups:
+            for sc in g.steps:
+                if sc.name not in sc_map:
+                    sc_map[sc.name] = sc
+        sc = sc_map.get(step.name)
+        if not sc or not sc.databases:
+            return
+
+        if len(sc.databases) == 1:
+            db = sc.databases[0]
+            cmd = self._resolve_db_command(db, step.name)
+            if cmd:
+                self._launch_command(cmd)
+            else:
+                log.warning("No command for database '%s'", db.label)
+        else:
+            menu = QMenu(self)
+            for db in sc.databases:
+                action = menu.addAction(db.label)
+                action.setData(db)
+            btn = self.sender()
+            if isinstance(btn, QPushButton):
+                pos = btn.mapToGlobal(btn.rect().bottomLeft())
+            else:
+                pos = self.viewport().mapToGlobal(
+                    self.visualItemRect(self.item(row, 0)).bottomLeft())
+            action = menu.exec_(pos)
+            if action:
+                db = action.data()
+                cmd = self._resolve_db_command(db, step.name)
+                if cmd:
+                    self._launch_command(cmd)
+
+    def _resolve_db_command(self, db, step_name: str) -> str:
+        """Resolve a DatabaseConfig to a launch command string."""
+        # Per-DB command takes priority
+        template = db.command
+        # Fall back to global/QSettings database_command
+        if not template:
+            template = self._get_database_command()
+        if not template:
+            return ""
+        return (template
+                .replace("{label}", db.label)
+                .replace("{version}", self._gv.name)
+                .replace("{step}", step_name)
+                .replace("{run_dir}", self._gv.dir_path))
+
+    def _get_database_command(self) -> str:
+        settings = QSettings("pdf_gui", "settings")
+        gui_cmd = settings.value("database_command", "")
+        if gui_cmd:
+            return gui_cmd
+        return self._config.database_command
+
+    def _launch_command(self, cmd: str):
+        """Run a launch command via subprocess."""
+        try:
+            subprocess.Popen(
+                cmd, shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            log.info("Launched: %s", cmd)
+        except OSError as e:
+            log.error("Failed to launch command: %s — %s", cmd, e)
 
     # ── context menu (reports + pictures) ───────────────────────────
 

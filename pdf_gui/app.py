@@ -1,4 +1,5 @@
 import os
+import shlex
 import subprocess
 
 from PyQt5.QtCore import QSettings, Qt, QTimer
@@ -121,6 +122,10 @@ class MainWindow(QMainWindow):
         self._overlay = RefreshOverlay(splitter)
         self._overlay.hide()
 
+        self._error_timer = QTimer(self)
+        self._error_timer.setSingleShot(True)
+        self._error_timer.timeout.connect(self._overlay.hide)
+
         self._apply_font(self._config.ui_font, self._config.default_font_size)
 
         theme.apply_theme(QApplication.instance(), self._config)
@@ -134,6 +139,8 @@ class MainWindow(QMainWindow):
 
     def refresh(self):
         log.info("Refresh started")
+        # Cancel any pending error-dismiss timer from a previous refresh
+        self._error_timer.stop()
         cmd = self._get_refresh_command()
 
         if cmd:
@@ -144,8 +151,9 @@ class MainWindow(QMainWindow):
             QApplication.processEvents()
             log.info("Running refresh script: %s", cmd)
             try:
+                args = shlex.split(cmd)
                 result = subprocess.run(
-                    cmd, shell=True, capture_output=True, text=True,
+                    args, shell=False, capture_output=True, text=True,
                     timeout=300)
                 if result.returncode != 0:
                     err = result.stderr.strip() or result.stdout.strip()
@@ -156,47 +164,54 @@ class MainWindow(QMainWindow):
                         f"Exit {result.returncode}: {err[:200]}"
                     )
                     QApplication.processEvents()
-                    QTimer.singleShot(3000, self._overlay.hide)
+                    self._error_timer.start(3000)
                     return
             except subprocess.TimeoutExpired:
                 log.error("Refresh script timed out after 300s")
                 self._overlay.set_message("Refresh script timed out", "")
                 QApplication.processEvents()
-                QTimer.singleShot(3000, self._overlay.hide)
+                self._error_timer.start(3000)
                 return
             except Exception as e:
                 log.error("Refresh script error: %s", e)
                 self._overlay.set_message("Refresh script error", str(e))
                 QApplication.processEvents()
-                QTimer.singleShot(3000, self._overlay.hide)
+                self._error_timer.start(3000)
                 return
 
-        self._overlay.set_message("Loading version data...", f"Scanning {self._runs_dir}")
-        QApplication.processEvents()
+        try:
+            self._overlay.set_message("Loading version data...", f"Scanning {self._runs_dir}")
+            QApplication.processEvents()
 
-        self._config = self._reload_config()
-        if self._config_mtime:
-            log.info("Config reloaded (file changed)")
-        run_dirs = scan_runs(self._runs_dir)
-        versions = load_versions(run_dirs, self._config)
-        versions = apply_sort(versions, self._sort_config)
-        if self._sort_config.get("rule") == "metric":
-            sc = self._sort_config
-            log.info("Sorted by %s/%s (%s)",
-                     sc["step_name"], sc["metric_key"],
-                     "ascending" if sc.get("ascending") else "descending")
+            self._config = self._reload_config()
+            if self._config_mtime:
+                log.info("Config reloaded (file changed)")
+            run_dirs = scan_runs(self._runs_dir)
+            versions = load_versions(run_dirs, self._config)
+            versions = apply_sort(versions, self._sort_config)
+            if self._sort_config.get("rule") == "metric":
+                sc = self._sort_config
+                log.info("Sorted by %s/%s (%s)",
+                         sc["step_name"], sc["metric_key"],
+                         "ascending" if sc.get("ascending") else "descending")
 
-        self._overlay.set_message(
-            "Rebuilding interface...",
-            f"Loaded {len(versions)} versions"
-        )
-        QApplication.processEvents()
+            self._overlay.set_message(
+                "Rebuilding interface...",
+                f"Loaded {len(versions)} versions"
+            )
+            QApplication.processEvents()
 
-        self._dataframe = build_dataframe(versions, self._config)
-        self._raw_versions = versions
-        self._rebuild_ui(versions)
-        self._overlay.hide()
-        log.info("Refresh complete: %d versions loaded", len(versions))
+            self._dataframe = build_dataframe(versions, self._config)
+            self._raw_versions = versions
+            self._rebuild_ui(versions)
+            log.info("Refresh complete: %d versions loaded", len(versions))
+        except Exception as e:
+            log.error("Refresh data loading error: %s", e)
+            self._overlay.set_message("Refresh failed", str(e))
+            QApplication.processEvents()
+            self._error_timer.start(5000)  # show error longer for data errors
+        finally:
+            self._overlay.hide()
 
     def _rebuild_ui(self, versions):
         self.setUpdatesEnabled(False)

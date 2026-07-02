@@ -4,7 +4,7 @@ A full-widget overlay shown during data refresh with a pulsing indicator
 and progress text. Matches the Silicon Terminal dark theme.
 """
 
-from PyQt5.QtCore import (QEasingCurve, QPoint, QPropertyAnimation, Qt, QTimer,
+from PyQt5.QtCore import (QEasingCurve, QPoint, QPropertyAnimation, Qt,
                           pyqtProperty)
 from PyQt5.QtGui import QColor, QFont, QPainter
 from PyQt5.QtWidgets import QLabel, QVBoxLayout, QWidget
@@ -26,6 +26,14 @@ class PulseDot(QWidget):
         self._anim.setEasingCurve(QEasingCurve.InOutSine)
         self._anim.setLoopCount(-1)  # infinite
         self._anim.start()
+
+    def start_animation(self):
+        if self._anim.state() != QPropertyAnimation.Running:
+            self._anim.start()
+
+    def stop_animation(self):
+        if self._anim.state() == QPropertyAnimation.Running:
+            self._anim.stop()
 
     @pyqtProperty(float)
     def pulse_radius(self):
@@ -84,16 +92,12 @@ class RefreshOverlay(QWidget):
 
         # Pulsing dot
         self._dot = PulseDot()
-        dot_wrapper = QVBoxLayout()
-        dot_wrapper.setAlignment(Qt.AlignCenter)
-        dot_wrapper.addWidget(self._dot)
-        layout.addLayout(dot_wrapper)
+        layout.addWidget(self._dot, alignment=Qt.AlignCenter)
 
         # Status text
         self._label = QLabel("Refreshing...")
         self._label.setAlignment(Qt.AlignCenter)
-        self._label.setFont(QFont(
-            getattr(theme.ThemeColors, "ui_font_family", "Segoe UI"), 12))
+        self._label.setFont(QFont("Segoe UI", 12))
         self._label.setStyleSheet(
             f"color: {theme.ThemeColors.text_primary}; "
             f"background: transparent; padding: 12px;"
@@ -118,22 +122,28 @@ class RefreshOverlay(QWidget):
         """Show the overlay with a status message."""
         self._label.setText(text)
         self._sub_label.setText(sub_text)
-        self.setGeometry(self.parent().rect())
+        self._sync_geometry()
         self.show()
         self.raise_()
-        self.repaint()  # force immediate paint before blocking operations
+        self._dot.start_animation()
+        self.repaint()
 
     def set_message(self, text: str, sub_text: str = ""):
         """Update the status text while overlay is visible."""
         self._label.setText(text)
         self._sub_label.setText(sub_text)
-        self.repaint()  # force immediate paint
+        self.repaint()
 
     def hide(self):
-        """Hide the overlay."""
+        """Hide the overlay and stop the pulse animation."""
+        self._dot.stop_animation()
         super().hide()
 
     def resizeEvent(self, event):
+        self._sync_geometry()
+        super().resizeEvent(event)
+
+    def _sync_geometry(self):
+        """Resize overlay to match parent bounds."""
         if self.parent():
             self.setGeometry(self.parent().rect())
-        super().resizeEvent(event)

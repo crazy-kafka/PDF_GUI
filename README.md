@@ -157,7 +157,7 @@ runs/
 ```
 
 - Missing step file → step is **not shown**. Supports branched versions (subset of steps). Write `"status": "PENDING"` JSON to show pending.
-- Overall version status (checked in priority order): any FAIL → red, any RUNNING → blue, all SUCCESS → green, last step PENDING + second-last SUCCESS → orange
+- Overall version status (checked in priority order): any FAIL → red, any RUNNING → blue, all SUCCESS → green, any PENDING → orange
 
 ## GUI Layout
 

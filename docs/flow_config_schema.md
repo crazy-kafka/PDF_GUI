@@ -307,8 +307,8 @@ Derived from step statuses (checked in priority order):
 - Any step `FAIL` → version `FAIL` (red)
 - Any step `RUNNING` → version `RUNNING` (blue)
 - All steps `SUCCESS` → version `SUCCESS` (green)
-- Last step `PENDING` and second-last `SUCCESS` → version `PENDING` (orange)
-- Otherwise → `RUNNING` (blue)
+- Any step `PENDING` → version `PENDING` (orange)
+- No steps → version `PENDING` (orange)
 
 ---
 

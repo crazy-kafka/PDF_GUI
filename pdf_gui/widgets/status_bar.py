@@ -20,8 +20,8 @@ class StatusBar:
         self._label = QLabel()
         self._bar.addPermanentWidget(self._label)
 
-    def update(self, versions, sort_config=None):
-        """Show status counts, sort method, and user name."""
+    def update(self, versions, sort_config=None, group_name: str = ""):
+        """Show status counts for current group, sort method, and user name."""
         counts = Counter(v.status.value for v in versions)
 
         parts = []
@@ -36,7 +36,8 @@ class StatusBar:
             sc = sort_config
             sort_info = f"{sc['metric_key']}/{sc['step_name']} ({'asc' if sc.get('ascending') else 'desc'})"
 
-        text = " | ".join(parts) + f" | Sort: {sort_info} | User: {self._user}"
+        prefix = f"{group_name} | " if group_name else ""
+        text = prefix + " | ".join(parts) + f" | Sort: {sort_info} | User: {self._user}"
         self._label.setText(text)
 
     def update_text(self, text: str):

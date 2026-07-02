@@ -1,4 +1,5 @@
 import os
+import shlex
 import subprocess
 
 from PyQt5.QtCore import QSettings, QUrl, Qt
@@ -208,12 +209,9 @@ class MetricTable(QTableWidget):
     def _open_file(self, file_path: str, file_type: str = "report"):
         cmd = self._get_picture_command() if file_type == "picture" else self._get_report_command()
         if cmd:
-            subprocess.Popen(
-                cmd.replace("{file}", file_path),
-                shell=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            args = shlex.split(cmd.replace("{file}", file_path))
+            subprocess.Popen(args, shell=False,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         elif os.path.isfile(file_path):
             QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
         else:
@@ -362,6 +360,8 @@ class MetricTable(QTableWidget):
                 cmd = self._resolve_db_command(db, step.name)
                 if cmd:
                     self._launch_command(cmd)
+                else:
+                    log.warning("No command for database '%s'", db.label)
 
     def _resolve_db_command(self, db, step_name: str) -> str:
         """Resolve a DatabaseConfig to a launch command string."""
@@ -388,13 +388,11 @@ class MetricTable(QTableWidget):
     def _launch_command(self, cmd: str):
         """Run a launch command via subprocess."""
         try:
-            subprocess.Popen(
-                cmd, shell=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            args = shlex.split(cmd)
+            subprocess.Popen(args, shell=False,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             log.info("Launched: %s", cmd)
-        except OSError as e:
+        except (OSError, ValueError) as e:
             log.error("Failed to launch command: %s — %s", cmd, e)
 
     # ── context menu (reports + pictures) ───────────────────────────

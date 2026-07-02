@@ -22,6 +22,7 @@ from pdf_gui.widgets.sidebar import Sidebar
 from pdf_gui.widgets.status_bar import StatusBar as SBWrapper
 from pdf_gui.widgets.toolbar import ToolbarWidget
 from pdf_gui.widgets.version_panel import VersionPanel
+from pdf_gui.widgets.refresh_overlay import RefreshOverlay
 from pdf_gui import theme
 
 log = get_logger()
@@ -117,6 +118,9 @@ class MainWindow(QMainWindow):
 
         self._sb_wrapper = SBWrapper(self.statusBar())
 
+        self._overlay = RefreshOverlay(splitter)
+        self._overlay.hide()
+
         self._apply_font(self._config.ui_font, self._config.default_font_size)
 
         theme.apply_theme(QApplication.instance(), self._config)
@@ -131,9 +135,14 @@ class MainWindow(QMainWindow):
     def refresh(self):
         log.info("Refresh started")
         cmd = self._get_refresh_command()
+
         if cmd:
+            self._overlay.show_with_message(
+                "Running refresh script...",
+                f"Script: {os.path.basename(cmd.split()[0]) if cmd else 'none'}"
+            )
+            QApplication.processEvents()
             log.info("Running refresh script: %s", cmd)
-            self._sb_wrapper.update_text("Running refresh script...")
             try:
                 result = subprocess.run(
                     cmd, shell=True, capture_output=True, text=True,
@@ -142,14 +151,28 @@ class MainWindow(QMainWindow):
                     err = result.stderr.strip() or result.stdout.strip()
                     log.error("Refresh script failed (exit %d): %s",
                               result.returncode, err[:200])
-                    self._sb_wrapper.update_text(
-                        f"Script failed (exit {result.returncode}): {err[:200]}")
+                    self._overlay.set_message(
+                        "Refresh script failed",
+                        f"Exit {result.returncode}: {err[:200]}"
+                    )
+                    QApplication.processEvents()
+                    QTimer.singleShot(3000, self._overlay.hide)
+                    return
             except subprocess.TimeoutExpired:
                 log.error("Refresh script timed out after 300s")
-                self._sb_wrapper.update_text("Refresh script timed out")
+                self._overlay.set_message("Refresh script timed out", "")
+                QApplication.processEvents()
+                QTimer.singleShot(3000, self._overlay.hide)
+                return
             except Exception as e:
                 log.error("Refresh script error: %s", e)
-                self._sb_wrapper.update_text(f"Script error: {e}")
+                self._overlay.set_message("Refresh script error", str(e))
+                QApplication.processEvents()
+                QTimer.singleShot(3000, self._overlay.hide)
+                return
+
+        self._overlay.set_message("Loading version data...", f"Scanning {self._runs_dir}")
+        QApplication.processEvents()
 
         self._config = self._reload_config()
         if self._config_mtime:
@@ -163,9 +186,16 @@ class MainWindow(QMainWindow):
                      sc["step_name"], sc["metric_key"],
                      "ascending" if sc.get("ascending") else "descending")
 
+        self._overlay.set_message(
+            "Rebuilding interface...",
+            f"Loaded {len(versions)} versions"
+        )
+        QApplication.processEvents()
+
         self._dataframe = build_dataframe(versions, self._config)
         self._raw_versions = versions
         self._rebuild_ui(versions)
+        self._overlay.hide()
         log.info("Refresh complete: %d versions loaded", len(versions))
 
     def _rebuild_ui(self, versions):
@@ -176,10 +206,14 @@ class MainWindow(QMainWindow):
             idx = self._tab_widget.currentIndex()
             if 0 <= idx < len(self._group_scrolls):
                 self._active_group_index = idx
+            group_name = getattr(self, "_active_group_name", "")
+            gv_list = getattr(self, "_active_gv_list", versions)
         else:
             self._rebuild_single_scroll(versions)
+            group_name = ""
+            gv_list = versions
 
-        self._sb_wrapper.update(versions, self._sort_config)
+        self._sb_wrapper.update(gv_list, self._sort_config, group_name)
         theme.apply_theme(QApplication.instance(), self._config)
         self.setUpdatesEnabled(True)
 
@@ -226,6 +260,8 @@ class MainWindow(QMainWindow):
 
             if g_idx == self._active_group_index:
                 all_gv = gv_list
+                self._active_gv_list = gv_list
+                self._active_group_name = group.label or group.name
                 self._sidebar.rebuild(gv_list)
         self._panels = [p for _, _, layout in self._group_scrolls
                         for i in range(layout.count())
@@ -242,6 +278,8 @@ class MainWindow(QMainWindow):
                 if isinstance(w, VersionPanel):
                     gv_list.append(w._gv)
             self._sidebar.rebuild(gv_list)
+            group_name = group.label or group.name
+            self._sb_wrapper.update(gv_list, self._sort_config, group_name)
 
     def _get_refresh_command(self) -> str:
         if self._cli_refresh_command is not None:

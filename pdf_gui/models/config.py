@@ -164,9 +164,18 @@ def load_config(path: str) -> FlowConfig:
                 else:
                     db_list = []
                     for db in gs.get("databases", []):
+                        # Normalize YAML null (None) to empty string
+                        raw_label = db.get("label")
+                        if raw_label is None:
+                            raw_label = db.get("command", "DB")
+                        if raw_label is None:
+                            raw_label = "DB"
+                        cmd = db.get("command", "")
+                        if cmd is None:
+                            cmd = ""
                         db_list.append(DatabaseConfig(
-                            label=db.get("label", db.get("command", "DB")),
-                            command=db.get("command", ""),
+                            label=raw_label,
+                            command=cmd,
                         ))
                     group_step_configs.append(StepConfig(
                         name=gs["name"], label=gs.get("label", ""),

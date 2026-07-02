@@ -137,12 +137,12 @@ def test_missing_step_file():
         assert len(versions) == 1
         v = versions[0]
         assert len(v.steps) == 0
-        assert v.status == OverallStatus.RUNNING
+        assert v.status == OverallStatus.PENDING
         assert v.latest_step == ""
 
 
 def test_derive_overall_pending():
-    """Last step PENDING + second-last SUCCESS → OverallStatus.PENDING."""
+    """Any PENDING step when no FAIL/RUNNING → OverallStatus.PENDING."""
     config = make_config()
     with tempfile.TemporaryDirectory() as tmp:
         make_run_dir(tmp, "2026-01-01_1200_chip_P", {"version": "chip_P"},

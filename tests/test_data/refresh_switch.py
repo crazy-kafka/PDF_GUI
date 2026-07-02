@@ -13,6 +13,7 @@ Each Refresh click toggles between:
 import os
 import subprocess
 import sys
+import time
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 STATE_FILE = os.path.join(SCRIPT_DIR, ".refresh_state")
@@ -26,7 +27,7 @@ def main():
             suite = int(f.read().strip())
 
     next_suite = 2 if suite == 1 else 1
-
+    time.sleep(3)  # Wait a moment to ensure the GUI has time to refresh before regenerating data
     subprocess.run(
         [sys.executable, GENERATOR, "--suite", str(next_suite)],
         check=True,

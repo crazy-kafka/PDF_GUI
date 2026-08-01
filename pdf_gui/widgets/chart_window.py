@@ -43,11 +43,11 @@ class ChartWindow(QMainWindow):
 
         # Config-driven status colors
         status_colors_cfg = cfg.get("status_colors", {})
-        colors = [status_colors_cfg.get(s, theme.ThemeColors.text_secondary)
+        colors = [status_colors_cfg.get(s, theme.get_theme().text_secondary)
                   for s in df["version_status"]]
 
-        # Dark matplotlib styling
-        tc = theme.ThemeColors
+        # Matplotlib styling following the active theme
+        tc = theme.get_theme()
         self._fig.patch.set_facecolor(tc.bg_deep)
         self._ax.set_facecolor(tc.bg_surface)
         self._ax.tick_params(colors=tc.text_secondary)

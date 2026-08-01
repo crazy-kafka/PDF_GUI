@@ -1,7 +1,9 @@
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QFont
-from PyQt5.QtWidgets import (QAction, QFontComboBox, QLabel, QSizePolicy,
-                             QSpinBox, QToolBar, QWidget)
+from PyQt5.QtWidgets import (QAction, QComboBox, QFontComboBox, QLabel,
+                             QSizePolicy, QSpinBox, QToolBar, QWidget)
+
+from pdf_gui import theme
 
 
 class ToolbarWidget(QToolBar):
@@ -11,6 +13,7 @@ class ToolbarWidget(QToolBar):
     export_clicked = pyqtSignal()
     sort_clicked = pyqtSignal()
     chart_clicked = pyqtSignal()
+    theme_changed = pyqtSignal(str)
 
     def __init__(self, default_font: str = "Consolas",
                  default_font_size: int = 10,
@@ -56,7 +59,18 @@ class ToolbarWidget(QToolBar):
         self.font_size.valueChanged.connect(self._on_font_changed)
         self.addWidget(self.font_size)
 
+        self.addWidget(QLabel("Theme:"))
+
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(theme.theme_names())
+        self.theme_combo.setCurrentText(theme.get_theme_name())
+        self.theme_combo.currentTextChanged.connect(self._on_theme_changed)
+        self.addWidget(self.theme_combo)
+
     def _on_font_changed(self):
         family = self.font_combo.currentFont().family()
         size = self.font_size.value()
         self.font_changed.emit(family, size)
+
+    def _on_theme_changed(self, name):
+        self.theme_changed.emit(name)

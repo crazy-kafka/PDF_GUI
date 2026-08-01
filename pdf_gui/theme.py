@@ -10,7 +10,7 @@ grounded in the VLSI physical design subject matter.
 from dataclasses import dataclass
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor, QFont, QPalette
+from PyQt5.QtGui import QColor, QPalette
 
 from pdf_gui.models.config import FlowConfig, StatusColors
 
@@ -19,32 +19,108 @@ from pdf_gui.models.config import FlowConfig, StatusColors
 
 @dataclass(frozen=True)
 class ThemeColors:
-    """Neutral palette tokens for the Silicon Terminal dark theme.
+    """Neutral palette tokens for a PDF_GUI color theme.
 
     Status colors (SUCCESS/FAIL/RUNNING/PENDING) are NOT stored here —
     they come from FlowConfig.colors and are functional, not decorative.
-    """
-    bg_deep: str = "#0D1117"
-    bg_surface: str = "#161B22"
-    bg_header: str = "#21262D"
-    border_subtle: str = "#30363D"
-    text_primary: str = "#E6EDF3"
-    text_secondary: str = "#8B949E"
-    text_dim: str = "#484F58"
 
-    # Dark-appropriate header variants for version_panel status bars.
-    # These are the standard status colors adjusted to sit comfortably
-    # on a dark background without overwhelming brightness.
-    header_success: str = "#2D6A37"
-    header_running: str = "#1A5A92"
-    header_fail: str = "#7A1C1C"
-    header_pending: str = "#7A4C00"
+    Instances are immutable; see the module-level DARK / LIGHT presets.
+    """
+    bg_deep: str
+    bg_surface: str
+    bg_header: str
+    border_subtle: str
+    text_primary: str
+    text_secondary: str
+    text_dim: str
+
+    # Header variants for version_panel status bars — the standard status
+    # colors adjusted to sit comfortably on this theme's background.
+    header_success: str
+    header_running: str
+    header_fail: str
+    header_pending: str
+
+    # Table header background — kept separate from bg_header (chrome) so
+    # light mode can use a clean non-grey header.
+    table_header_bg: str
+    # Table alternate-row background. Light mode uses the same white as
+    # the base cells for a clean, uniform look.
+    table_alt_bg: str
+    # Text color on version_panel header bars (white on dark, dark on light).
+    header_text: str
+
+
+DARK = ThemeColors(
+    bg_deep="#0D1117",
+    bg_surface="#161B22",
+    bg_header="#21262D",
+    border_subtle="#30363D",
+    text_primary="#E6EDF3",
+    text_secondary="#8B949E",
+    text_dim="#484F58",
+    header_success="#2D6A37",
+    header_running="#1A5A92",
+    header_fail="#7A1C1C",
+    header_pending="#7A4C00",
+    table_header_bg="#21262D",
+    table_alt_bg="#161B22",
+    header_text="#FFFFFF",
+)
+
+LIGHT = ThemeColors(
+    bg_deep="#FFFFFF",
+    bg_surface="#F2F3F5",
+    bg_header="#DDE1E6",
+    border_subtle="#C1C7CD",
+    text_primary="#1A1A1A",
+    text_secondary="#5A5F66",
+    text_dim="#999999",
+    header_success="#A5D6A7",
+    header_running="#90CAF9",
+    header_fail="#EF9A9A",
+    header_pending="#FFE0B2",
+    table_header_bg="#FFFFFF",
+    table_alt_bg="#FFFFFF",
+    header_text="#1A1A1A",
+)
+
+_THEMES = {
+    "dark": DARK,
+    "light": LIGHT,
+}
+_current_name = "dark"
+
+
+def theme_names() -> list:
+    """Return the available theme names (capitalized, e.g. 'Dark')."""
+    return [n.capitalize() for n in _THEMES]
+
+
+def set_theme(name: str) -> None:
+    """Switch the active theme by name ('Dark' / 'Light')."""
+    global _current_name
+    key = name.strip().lower()
+    if key not in _THEMES:
+        raise ValueError(
+            f"Unknown theme: {name!r}; available: {theme_names()}")
+    _current_name = key
+
+
+def get_theme() -> ThemeColors:
+    """Return the currently active theme's color tokens."""
+    return _THEMES[_current_name]
+
+
+def get_theme_name() -> str:
+    """Return the active theme's display name (e.g. 'Dark')."""
+    return _current_name.capitalize()
 
 
 # ── QPalette builder ────────────────────────────────────────────────
 
-def build_dark_palette(colors: ThemeColors) -> QPalette:
-    """Return a QPalette configured for the Silicon Terminal dark theme."""
+def build_palette(colors: ThemeColors) -> QPalette:
+    """Return a QPalette configured from the given theme tokens."""
     p = QPalette()
 
     # Window
@@ -110,7 +186,7 @@ def build_global_qss(colors: ThemeColors) -> str:
         background-color: {colors.border_subtle};
     }}
     QHeaderView::section {{
-        background-color: {colors.bg_header};
+        background-color: {colors.table_header_bg};
         color: {colors.text_primary};
         font-weight: bold;
         border: 1px solid {colors.border_subtle};
@@ -121,7 +197,7 @@ def build_global_qss(colors: ThemeColors) -> str:
         color: {colors.text_primary};
         gridline-color: {colors.border_subtle};
         border: none;
-        alternate-background-color: {colors.bg_surface};
+        alternate-background-color: {colors.table_alt_bg};
     }}
     QListWidget {{
         background-color: {colors.bg_surface};
@@ -186,9 +262,6 @@ def build_global_qss(colors: ThemeColors) -> str:
         background-color: {colors.bg_deep};
         color: {colors.text_primary};
     }}
-    QLabel {{
-        color: {colors.text_primary};
-    }}
     QRadioButton {{
         color: {colors.text_primary};
     }}
@@ -216,17 +289,6 @@ def build_global_qss(colors: ThemeColors) -> str:
 
 # ── Status color helper ─────────────────────────────────────────────
 
-# Dark-appropriate header color variants keyed by standard status color hex.
-_HEADER_VARIANT_MAP = {
-    "#4CAF50": ThemeColors.header_success,
-    "#F44336": ThemeColors.header_fail,
-    "#2196F3": ThemeColors.header_running,
-    "#FF9800": ThemeColors.header_pending,
-    # Also cover the old PENDING fallback
-    "#9E9E9E": "#757575",
-}
-
-
 def status_color(config_colors: StatusColors, status_value) -> str:
     """Map any status enum (OverallStatus or StepStatus) to its hex color.
 
@@ -245,13 +307,22 @@ def status_color(config_colors: StatusColors, status_value) -> str:
 
 
 def header_color(config_colors: StatusColors, status_value) -> str:
-    """Return a dark-appropriate header bar color for the given status.
+    """Return a header bar color for the given status for the active theme.
 
-    Uses darker variants of the standard status colors so the header
-    bar sits comfortably on a dark background.
+    Uses theme-appropriate variants of the standard status colors so the
+    header bar sits comfortably on the current background.
     """
     standard = status_color(config_colors, status_value)
-    return _HEADER_VARIANT_MAP.get(standard, "#757575")
+    colors = get_theme()
+    variants = {
+        "#4CAF50": colors.header_success,
+        "#F44336": colors.header_fail,
+        "#2196F3": colors.header_running,
+        "#FF9800": colors.header_pending,
+        # Also cover the old PENDING fallback
+        "#9E9E9E": colors.text_dim,
+    }
+    return variants.get(standard, colors.text_dim)
 
 
 # ── Theme application ───────────────────────────────────────────────
@@ -259,23 +330,17 @@ def header_color(config_colors: StatusColors, status_value) -> str:
 def apply_theme(app, config: FlowConfig):
     """Apply the complete Silicon Terminal theme in one call.
 
-    Sets the QPalette, global QSS stylesheet, and fonts for the
-    entire QApplication. Call once during startup and again after
-    any UI rebuild that recreates widgets.
+    Sets the QPalette and global QSS stylesheet for the entire
+    QApplication. Fonts are managed by MainWindow (so the user's
+    toolbar font choice is not reset on rebuild). Call once during
+    startup and again after any UI rebuild that recreates widgets.
     """
-    colors = ThemeColors()
+    colors = get_theme()
 
     # Palette
-    palette = build_dark_palette(colors)
+    palette = build_palette(colors)
     app.setPalette(palette)
 
     # Global QSS
     qss = build_global_qss(colors)
     app.setStyleSheet(qss)
-
-    # Fonts: UI chrome gets the ui_font, data cells get data_font.
-    # The global font is the UI font. Data cells override explicitly.
-    ui_family = getattr(config, "ui_font", config.default_font)
-    ui_size = config.default_font_size
-    font = QFont(ui_family, ui_size)
-    app.setFont(font)

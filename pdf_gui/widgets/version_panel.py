@@ -51,7 +51,8 @@ class VersionPanel(QWidget):
 
         name = self._gv.name
         name_label = QLabel(f"Version: {name}")
-        name_label.setStyleSheet("color: white; font-weight: bold;")
+        name_label.setStyleSheet(
+            f"color: {theme.get_theme().header_text}; font-weight: bold;")
         name_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         hlayout.addWidget(name_label)
 
@@ -65,7 +66,8 @@ class VersionPanel(QWidget):
         elif self._gv.status == OverallStatus.PENDING:
             icon = self._config.icons.PENDING
         status_label = QLabel(f"{icon} {self._gv.status.value}")
-        status_label.setStyleSheet("color: white; font-weight: bold;")
+        status_label.setStyleSheet(
+            f"color: {theme.get_theme().header_text}; font-weight: bold;")
         hlayout.addWidget(status_label)
 
         return frame
@@ -75,8 +77,12 @@ class VersionPanel(QWidget):
         self._table.setVisible(not self._collapsed)
         self._fold_btn.setText("+" if self._collapsed else "−")
 
-    def resize_for_font(self):
-        self._table.resize_for_font()
+    def resize_for_font(self, data_family: str, size: int):
+        self._table.resize_for_font(data_family, size)
+
+    def table_width(self) -> int:
+        """Total width of all table columns (content width, not viewport)."""
+        return self._table.horizontalHeader().length()
 
     def is_collapsed(self) -> bool:
         return self._collapsed

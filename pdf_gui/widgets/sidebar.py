@@ -22,7 +22,7 @@ class Sidebar(QWidget):
         header.setObjectName("sidebar_header")
         header.setStyleSheet(
             f"font-weight: bold; font-size: 11px; "
-            f"color: {theme.ThemeColors.text_secondary}; "
+            f"color: {theme.get_theme().text_secondary}; "
             f"padding: 2px 4px;"
         )
         layout.addWidget(header)
@@ -111,7 +111,7 @@ class Sidebar(QWidget):
         sub_step_label.setObjectName("sub_step_label")
         # Use theme text_secondary for step info
         sub_step_label.setStyleSheet(
-            f"color: {theme.ThemeColors.text_secondary}; font-size: 11px;")
+            f"color: {theme.get_theme().text_secondary}; font-size: 11px;")
         sub_step_label.setToolTip(step_text)
         fm_sub = sub_step_label.fontMetrics()
         sub_step_label.setText(fm_sub.elidedText(step_text, Qt.ElideRight, self.width() - 70))

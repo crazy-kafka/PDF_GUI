@@ -70,6 +70,7 @@ class MainWindow(QMainWindow):
         )
         self._toolbar.refresh_clicked.connect(self.refresh)
         self._toolbar.font_changed.connect(self._apply_font)
+        self._toolbar.theme_changed.connect(self._on_theme_changed)
         self._toolbar.settings_clicked.connect(self._open_settings)
         self._toolbar.export_clicked.connect(self._open_export)
         self._toolbar.sort_clicked.connect(self._open_sort)
@@ -87,7 +88,7 @@ class MainWindow(QMainWindow):
             for g in self._config.step_groups:
                 scroll = QScrollArea()
                 scroll.setWidgetResizable(True)
-                scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+                scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
                 container = QWidget()
                 layout = QVBoxLayout(container)
                 layout.setContentsMargins(4, 4, 4, 4)
@@ -99,7 +100,7 @@ class MainWindow(QMainWindow):
 
         self._scroll_area = QScrollArea()
         self._scroll_area.setWidgetResizable(True)
-        self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self._scroll_container = QWidget()
         self._scroll_layout = QVBoxLayout(self._scroll_container)
         self._scroll_layout.setContentsMargins(4, 4, 4, 4)
@@ -126,7 +127,7 @@ class MainWindow(QMainWindow):
         self._error_timer.setSingleShot(True)
         self._error_timer.timeout.connect(self._overlay.hide)
 
-        self._apply_font(self._config.ui_font, self._config.default_font_size)
+        self._init_fonts()
 
         theme.apply_theme(QApplication.instance(), self._config)
 
@@ -230,6 +231,7 @@ class MainWindow(QMainWindow):
 
         self._sb_wrapper.update(gv_list, self._sort_config, group_name)
         theme.apply_theme(QApplication.instance(), self._config)
+        self._render_fonts()
         self.setUpdatesEnabled(True)
 
     def _rebuild_single_scroll(self, versions):
@@ -249,6 +251,7 @@ class MainWindow(QMainWindow):
                 panel.set_collapsed(self._fold_states[v.name])
             self._panels.append(panel)
             self._scroll_layout.insertWidget(self._scroll_layout.count() - 1, panel)
+        self._set_container_min_width(self._scroll_container, self._panels)
         self._sidebar.rebuild(versions)
 
     def _rebuild_group_tabs(self, versions):
@@ -272,6 +275,7 @@ class MainWindow(QMainWindow):
                     panel.set_collapsed(self._fold_states[gv.name])
                 panels.append(panel)
                 layout.insertWidget(layout.count() - 1, panel)
+            self._set_container_min_width(scroll.widget(), panels)
 
             if g_idx == self._active_group_index:
                 all_gv = gv_list
@@ -282,6 +286,11 @@ class MainWindow(QMainWindow):
                         for i in range(layout.count())
                         if isinstance(layout.itemAt(i).widget(), VersionPanel)
                         and (p := layout.itemAt(i).widget())]
+
+    def _set_container_min_width(self, container, panels):
+        """Widen the scroll container so wide tables show a horizontal scrollbar."""
+        max_w = max((p.table_width() for p in panels), default=0)
+        container.setMinimumWidth(max_w + 8)  # 8 = margins (4+4)
 
     def _on_tab_changed(self, idx):
         if 0 <= idx < len(self._group_scrolls):
@@ -308,6 +317,16 @@ class MainWindow(QMainWindow):
     def _open_settings(self):
         dialog = SettingsDialog(self)
         dialog.exec_()
+
+    def _on_theme_changed(self, name: str):
+        """Apply a theme selection and rebuild the UI in the new colors."""
+        try:
+            theme.set_theme(name)
+        except ValueError as e:
+            log.warning("%s", e)
+            return
+        self._rebuild_ui(list(self._raw_versions))
+        self._overlay.apply_theme()
 
     def _open_export(self):
         versions = list(self._raw_versions) if self._raw_versions else []
@@ -363,17 +382,33 @@ class MainWindow(QMainWindow):
                     self._scroll_area.ensureWidgetVisible(panel, 0, 20)
                     break
 
+    def _init_fonts(self):
+        """Apply configured fonts: ui_font for chrome, data_font for tables."""
+        self._font_family = getattr(self._config, "ui_font", self._config.default_font)
+        self._data_family = self._config.data_font
+        self._font_size = self._config.default_font_size
+        self._render_fonts()
+
     def _apply_font(self, family: str, size: int):
-        font = QFont(family, size)
-        QApplication.setFont(font)
-        # Data font: same size, but keep the configured data font family
-        self._data_font = QFont(self._config.data_font, size)
+        """Apply the user's toolbar font to the entire GUI, including tables."""
+        self._font_family = family
+        self._data_family = family
+        self._font_size = size
+        self._render_fonts()
+
+    def _render_fonts(self):
+        """Push the stored font choices to the app and all version panels."""
+        QApplication.setFont(QFont(self._font_family, self._font_size))
         if self._config.step_groups:
-            for _, _, layout in self._group_scrolls:
+            for _, scroll, layout in self._group_scrolls:
+                panels = []
                 for i in range(layout.count()):
                     w = layout.itemAt(i).widget()
                     if isinstance(w, VersionPanel):
-                        w.resize_for_font()
+                        w.resize_for_font(self._data_family, self._font_size)
+                        panels.append(w)
+                self._set_container_min_width(scroll.widget(), panels)
         else:
             for panel in self._panels:
-                panel.resize_for_font()
+                panel.resize_for_font(self._data_family, self._font_size)
+            self._set_container_min_width(self._scroll_container, self._panels)

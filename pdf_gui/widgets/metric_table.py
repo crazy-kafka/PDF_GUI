@@ -78,10 +78,10 @@ class MetricTable(QTableWidget):
 
     def _build_grouped_header(self, eff_metrics):
         """Render two-row header with parent group labels spanning sub-columns."""
-        hdr_fill = QColor(theme.ThemeColors.bg_header)
+        hdr_fill = QColor(theme.get_theme().table_header_bg)
         hdr_font_w = QFont()
         hdr_font_w.setBold(True)
-        hdr_fg = QColor(theme.ThemeColors.text_primary)
+        hdr_fg = QColor(theme.get_theme().text_primary)
 
         def _hdr_cell(text, row, col):
             item = QTableWidgetItem(text)
@@ -163,7 +163,7 @@ class MetricTable(QTableWidget):
 
     def _apply_fixed_height(self):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         height = 0
         if not self._has_grouped_header:
             height += self.horizontalHeader().height()
@@ -172,8 +172,14 @@ class MetricTable(QTableWidget):
         height += 4  # frame border allowance
         self.setFixedHeight(height)
 
-    def resize_for_font(self):
-        """Recompute column widths and table height after font change."""
+    def resize_for_font(self, data_family: str, size: int):
+        """Apply new data font to all cells, then recompute sizes."""
+        self._data_font = QFont(data_family, size)
+        for row in range(self.rowCount()):
+            for col in range(self.columnCount()):
+                item = self.item(row, col)
+                if item is not None:
+                    item.setFont(self._data_font)
         self._apply_column_widths()
         self._apply_fixed_height()
 
@@ -269,7 +275,7 @@ class MetricTable(QTableWidget):
                 elif jc.key == "status":
                     icon = icon_map.get(step.status, "?")
                     item = QTableWidgetItem(f"{icon} {step.status.value}")
-                    item.setForeground(color_map.get(step.status, QColor(theme.ThemeColors.text_primary)))
+                    item.setForeground(color_map.get(step.status, QColor(theme.get_theme().text_primary)))
                 else:
                     val = getattr(step.job, jc.key, "")
                     item = QTableWidgetItem(str(val))

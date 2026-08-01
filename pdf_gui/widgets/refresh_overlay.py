@@ -50,13 +50,13 @@ class PulseDot(QWidget):
         center = QPoint(self.width() // 2, self.height() // 2)
         r = int(self._radius)
         # Outer glow ring
-        glow = QColor(theme.ThemeColors.text_secondary)
+        glow = QColor(theme.get_theme().text_secondary)
         glow.setAlpha(30)
         p.setPen(Qt.NoPen)
         p.setBrush(glow)
         p.drawEllipse(center, r + 4, r + 4)
         # Inner dot
-        dot_color = QColor(theme.ThemeColors.text_primary)
+        dot_color = QColor(theme.get_theme().text_primary)
         dot_color.setAlpha(220)
         p.setBrush(dot_color)
         p.drawEllipse(center, r, r)
@@ -80,9 +80,8 @@ class RefreshOverlay(QWidget):
         self.setObjectName("refresh_overlay")
         super().hide()
 
-        # Semi-transparent dark backdrop
-        self._backdrop = QColor(theme.ThemeColors.bg_deep)
-        self._backdrop.setAlpha(220)
+        # Semi-transparent backdrop (alpha applied in _style)
+        self._backdrop = QColor(theme.get_theme().bg_deep)
 
         # Block input during refresh
         self.setAttribute(Qt.WA_TransparentForMouseEvents, False)
@@ -98,20 +97,33 @@ class RefreshOverlay(QWidget):
         self._label = QLabel("Refreshing...")
         self._label.setAlignment(Qt.AlignCenter)
         self._label.setFont(QFont("Segoe UI", 12))
-        self._label.setStyleSheet(
-            f"color: {theme.ThemeColors.text_primary}; "
-            f"background: transparent; padding: 12px;"
-        )
         layout.addWidget(self._label)
 
         # Sub-text (smaller, dimmer)
         self._sub_label = QLabel("")
         self._sub_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self._sub_label)
+
+        self._style()
+
+    def _style(self):
+        """Apply the active theme's colors to the overlay's chrome."""
+        colors = theme.get_theme()
+        self._backdrop = QColor(colors.bg_deep)
+        self._backdrop.setAlpha(220)
+        self._label.setStyleSheet(
+            f"color: {colors.text_primary}; "
+            f"background: transparent; padding: 12px;"
+        )
         self._sub_label.setStyleSheet(
-            f"color: {theme.ThemeColors.text_secondary}; "
+            f"color: {colors.text_secondary}; "
             f"background: transparent; font-size: 10px;"
         )
-        layout.addWidget(self._sub_label)
+
+    def apply_theme(self):
+        """Recolor the overlay after a theme change (persists across rebuilds)."""
+        self._style()
+        self.update()
 
     def paintEvent(self, event):
         p = QPainter(self)

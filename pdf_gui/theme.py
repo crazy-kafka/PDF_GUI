@@ -3,8 +3,11 @@
 Single source of truth for all colors, typography, and QSS generation.
 No other module should contain hardcoded color values.
 
-Design: "Silicon Terminal" — a dark, precision-oriented monitoring dashboard
-grounded in the VLSI physical design subject matter.
+Designs:
+- "Silicon Terminal" (dark) — a dark, precision-oriented monitoring
+  dashboard grounded in the VLSI physical design subject matter.
+- "Cleanroom" (light) — warm paper whites and amber undertones echoing
+  semiconductor fab cleanroom lighting (photoresist-safe 589nm lamps).
 """
 
 from dataclasses import dataclass
@@ -69,20 +72,20 @@ DARK = ThemeColors(
 )
 
 LIGHT = ThemeColors(
-    bg_deep="#FFFFFF",
-    bg_surface="#F2F3F5",
-    bg_header="#DDE1E6",
-    border_subtle="#C1C7CD",
-    text_primary="#1A1A1A",
-    text_secondary="#5A5F66",
-    text_dim="#999999",
-    header_success="#A5D6A7",
-    header_running="#90CAF9",
-    header_fail="#EF9A9A",
-    header_pending="#FFE0B2",
-    table_header_bg="#FFFFFF",
-    table_alt_bg="#FFFFFF",
-    header_text="#1A1A1A",
+    bg_deep="#FBF8F4",
+    bg_surface="#F0EDE6",
+    bg_header="#E5E0D6",
+    border_subtle="#C8C2B5",
+    text_primary="#1E1B18",
+    text_secondary="#6B6358",
+    text_dim="#A0988A",
+    header_success="#8CC99A",
+    header_running="#7DB5E8",
+    header_fail="#E8837D",
+    header_pending="#EBC560",
+    table_header_bg="#FBF8F4",
+    table_alt_bg="#FBF8F4",
+    header_text="#1E1B18",
 )
 
 _THEMES = {

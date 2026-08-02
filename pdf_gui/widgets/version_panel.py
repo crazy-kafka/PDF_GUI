@@ -1,6 +1,6 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QFrame, QHBoxLayout, QLabel, QPushButton,
-                             QVBoxLayout, QWidget)
+                             QSizePolicy, QVBoxLayout, QWidget)
 
 from pdf_gui.models.config import FlowConfig, StepGroupConfig
 from pdf_gui.models.run_data import GroupedVersion, OverallStatus, Version
@@ -20,6 +20,9 @@ class VersionPanel(QWidget):
         self._build_ui()
 
     def _build_ui(self):
+        # Keep the panel at its natural height so the outer container's
+        # layout can't stretch it and open a gap between header and table.
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 2)
         layout.setSpacing(0)

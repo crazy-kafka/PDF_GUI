@@ -50,6 +50,9 @@ class ThemeColors:
     # Table alternate-row background. Light mode uses the same white as
     # the base cells for a clean, uniform look.
     table_alt_bg: str
+    # Strong metric separators — distinct from the regular gridline while
+    # remaining neutral enough to fit both themes.
+    metric_separator: str
     # Text color on version_panel header bars (white on dark, dark on light).
     header_text: str
 
@@ -68,6 +71,7 @@ DARK = ThemeColors(
     header_pending="#7A4C00",
     table_header_bg="#21262D",
     table_alt_bg="#161B22",
+    metric_separator="#58A6B8",
     header_text="#FFFFFF",
 )
 
@@ -85,6 +89,7 @@ LIGHT = ThemeColors(
     header_pending="#EBC560",
     table_header_bg="#FBF8F4",
     table_alt_bg="#FBF8F4",
+    metric_separator="#5F7F86",
     header_text="#1E1B18",
 )
 

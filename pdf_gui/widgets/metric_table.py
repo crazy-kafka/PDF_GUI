@@ -3,10 +3,10 @@ import shlex
 import subprocess
 
 from PyQt5.QtCore import QSettings, QUrl, Qt
-from PyQt5.QtGui import QColor, QDesktopServices, QFont
+from PyQt5.QtGui import QColor, QDesktopServices, QFont, QPen
 from PyQt5.QtWidgets import (QAbstractItemView, QAction, QFrame, QHeaderView,
-                             QMenu, QPushButton, QTableWidget,
-                             QTableWidgetItem)
+                             QMenu, QPushButton, QStyledItemDelegate,
+                             QTableWidget, QTableWidgetItem)
 
 from pdf_gui.models.config import FlowConfig, StepGroupConfig
 from pdf_gui.models.run_data import GroupedVersion, StepStatus, Version
@@ -14,6 +14,26 @@ from pdf_gui.utils.log import get_logger
 from pdf_gui import theme
 
 log = get_logger()
+
+
+class MetricBorderDelegate(QStyledItemDelegate):
+    """Emphasize boundaries between metrics without changing group internals."""
+
+    def __init__(self, table, parent=None):
+        super().__init__(parent)
+        self._table = table
+
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+
+        if not self._table._is_metric_start(index.column()):
+            return
+
+        painter.save()
+        painter.setPen(QPen(QColor(theme.get_theme().metric_separator), 2))
+        x = option.rect.left()
+        painter.drawLine(x, option.rect.top(), x, option.rect.bottom())
+        painter.restore()
 
 
 class MetricTable(QTableWidget):
@@ -64,6 +84,12 @@ class MetricTable(QTableWidget):
         self.setAlternatingRowColors(True)
         self.setShowGrid(True)
         self.setGridStyle(Qt.SolidLine)
+        self._metric_end_col = 1 + len(eff_metrics)
+        self._metric_separator_cols = {
+            col for col in range(1, self._metric_end_col)
+            if col == 1 or not self._same_metric_group(col - 1, col, eff_metrics)
+        }
+        self.setItemDelegate(MetricBorderDelegate(self, self))
         self._data_font = QFont(config.data_font, config.default_font_size)
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_context_menu)
@@ -75,6 +101,17 @@ class MetricTable(QTableWidget):
 
         self._apply_column_widths()
         self._apply_fixed_height()
+
+    def _same_metric_group(self, left_col, right_col, metrics):
+        left_key = metrics[left_col - 1].key
+        right_key = metrics[right_col - 1].key
+        if "@" not in left_key or "@" not in right_key:
+            return False
+        return left_key.split("@", 1)[0] == right_key.split("@", 1)[0]
+
+    def _is_metric_start(self, column):
+        """Return whether a column should receive a strong left border."""
+        return column in self._metric_separator_cols
 
     def _build_grouped_header(self, eff_metrics):
         """Render two-row header with parent group labels spanning sub-columns."""
